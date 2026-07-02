@@ -1,0 +1,17 @@
+{
+  "name": "telegram-drive-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.2",
+    "input": "^1.0.1",
+    "multer": "^1.4.5-lts.1",
+    "telegram": "^2.26.0"
+  }
+}
