@@ -1,6 +1,6 @@
 import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
-import { CustomFile } from 'telegram/client/uploads/index.js';
+import { CustomFile } from 'telegram/client/uploads.js';
 import { pendingLogins, activeClients, removeClient } from './clientManager.js';
 import { encrypt } from './crypto.js';
 import { supabase } from './supabase.js';

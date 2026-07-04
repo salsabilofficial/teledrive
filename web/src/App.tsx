@@ -68,8 +68,18 @@ function AppContent() {
           return;
         }
 
-        const status = await api.authStatus().catch(() => ({ authenticated: false }));
-        if (status.authenticated) {
+        const status = await api.authStatus()
+          .then(res => ({ ...res, unauthorized: false }))
+          .catch((err: any) => {
+            if (err && err.status === 401) {
+              return { authenticated: false, unauthorized: true };
+            }
+            return { authenticated: false, unauthorized: false };
+          });
+
+        if (status.unauthorized) {
+          setAuthStatus("portal_unauthenticated");
+        } else if (status.authenticated) {
           setAuthStatus("telegram_authenticated");
         } else {
           setAuthStatus("telegram_unauthenticated");
@@ -83,8 +93,18 @@ function AppContent() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        const status = await api.authStatus().catch(() => ({ authenticated: false }));
-        if (status.authenticated) {
+        const status = await api.authStatus()
+          .then(res => ({ ...res, unauthorized: false }))
+          .catch((err: any) => {
+            if (err && err.status === 401) {
+              return { authenticated: false, unauthorized: true };
+            }
+            return { authenticated: false, unauthorized: false };
+          });
+
+        if (status.unauthorized) {
+          setAuthStatus("portal_unauthenticated");
+        } else if (status.authenticated) {
           setAuthStatus("telegram_authenticated");
         } else {
           setAuthStatus("telegram_unauthenticated");
