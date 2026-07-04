@@ -34,6 +34,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   const { theme } = useTheme();
   const { settings, updateSetting } = useSettings();
   const viewMode = settings.viewMode || 'list';
+  const [searchTerm, setSearchTerm] = useState("");
 
   const logoutHandler = useMemo(() => onLogout || (() => {}), [onLogout]);
 
@@ -248,29 +249,55 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   }, [folders, activeFolderId]);
 
   const displayFiles = useMemo(() => {
-    if (fileRenames.size === 0) return allFiles;
-    return allFiles.map(f =>
-      fileRenames.has(f.id) ? { ...f, name: fileRenames.get(f.id)! } : f
-    );
-  }, [allFiles, fileRenames]);
+    let files = allFiles;
+    if (fileRenames.size > 0) {
+      files = allFiles.map(f =>
+        fileRenames.has(f.id) ? { ...f, name: fileRenames.get(f.id)! } : f
+      );
+    }
+    if (searchTerm.trim() !== '') {
+      const q = searchTerm.toLowerCase();
+      files = files.filter(f => f.name.toLowerCase().includes(q));
+    }
+    return files;
+  }, [allFiles, fileRenames, searchTerm]);
 
   return (
     <div className="absolute inset-0 flex flex-col bg-telegram-bg text-telegram-text overflow-hidden select-none font-sans">
-      <header className="flex items-center justify-between px-5 pb-4 pt-[calc(1rem+env(safe-area-inset-top,24px))] bg-gradient-to-r from-telegram-hover/40 to-telegram-bg border-b border-telegram-border/60 shadow-lg backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <img src="/logo.svg" className="w-8 h-8 drop-shadow-lg" alt="Logo" />
-          <div>
-            <h1 className={`text-base font-bold tracking-tight ${theme === 'light' ? 'text-[#1c1c1e]' : 'bg-gradient-to-r from-white to-telegram-subtext bg-clip-text text-transparent'}`}>Telegram Drive</h1>
+      <header className="flex items-center gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,24px))] bg-gradient-to-b from-telegram-hover/40 to-telegram-bg border-b border-telegram-border/60 shadow-lg backdrop-blur-md sticky top-0 z-40">
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="flex items-center justify-center p-2 rounded-xl bg-telegram-hover/30 hover:bg-telegram-hover/60 border border-telegram-border/40 text-telegram-subtext active:scale-95 transition-all duration-200"
+          aria-label="Menu"
+        >
+          <Menu className="w-5 h-5 text-telegram-primary" />
+        </button>
+
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            placeholder={t('Search files...')}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-telegram-hover/40 text-telegram-text border border-telegram-border/40 placeholder:text-telegram-subtext/60 text-xs focus:outline-none focus:border-telegram-primary/60 focus:bg-telegram-hover/60 transition-all"
+          />
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-telegram-subtext/60">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-telegram-hover/60 text-telegram-subtext/60"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center">
           <ThemeToggle />
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 rounded-xl bg-telegram-hover/30 hover:bg-telegram-hover/60 border border-telegram-border/40 text-telegram-subtext transition-all duration-300"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
         </div>
       </header>
 
