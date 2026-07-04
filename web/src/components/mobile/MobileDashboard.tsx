@@ -358,30 +358,24 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
         )}
 
         {activeTab === 'files' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between bg-telegram-hover/20 p-3 rounded-2xl border border-telegram-border/30">
-              <div className="flex items-center gap-2.5">
-                <Folder className="w-5 h-5 text-telegram-primary" />
-                <span className="text-sm font-semibold truncate max-w-[150px]">{activeFolder}</span>
+          <>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-telegram-hover/20 p-3 rounded-2xl border border-telegram-border/30">
+                <div className="flex items-center gap-2.5">
+                  <Folder className="w-5 h-5 text-telegram-primary" />
+                  <span className="text-sm font-semibold truncate max-w-[150px]">{activeFolder}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSyncFolders}
+                    disabled={isSyncing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10 active:scale-95 transition-all duration-200 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    Sync
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleManualUpload}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-telegram-primary text-black hover:bg-telegram-primary/95 border border-telegram-primary/10 active:scale-95 transition-all duration-200"
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  Upload
-                </button>
-                <button
-                  onClick={handleSyncFolders}
-                  disabled={isSyncing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10 active:scale-95 transition-all duration-200 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
-              </div>
-            </div>
 
             <TouchFileList
               files={displayFiles}
@@ -404,7 +398,17 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
               activeFolderId={activeFolderId}
             />
           </div>
-        )}
+
+          {/* Floating Action Button (FAB) for Upload */}
+          <button
+            onClick={handleManualUpload}
+            className="fixed bottom-24 right-6 z-[99] flex items-center justify-center w-14 h-14 rounded-full bg-telegram-primary text-black shadow-lg shadow-telegram-primary/30 active:scale-90 transition-transform duration-200 outline-none focus:outline-none"
+            aria-label="Upload file"
+          >
+            <UploadCloud className="w-6 h-6" />
+          </button>
+        </>
+      )}
 
         {activeTab === 'downloads' && (
           <div className="space-y-5">
