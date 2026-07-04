@@ -53,7 +53,7 @@ const defaultSettings: Settings = {
     maxConcurrentUploads: 6,
     maxConcurrentDownloads: 6,
     zipFolders: true,
-    language: 'en',
+    language: 'id',
 
     proxyEnabled: false,
     proxyType: 'socks5',

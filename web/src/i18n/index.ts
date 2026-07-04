@@ -33,8 +33,8 @@ i18n
       ja: { translation: ja },
       ko: { translation: ko },
     },
-    lng: 'en',
-    fallbackLng: 'en',
+    lng: 'id',
+    fallbackLng: 'id',
     interpolation: {
       escapeValue: false, // React already safeguards from XSS
     },
