@@ -15,6 +15,7 @@ const MobileDashboard = React.lazy(() => import("./components/mobile/MobileDashb
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
 import { ConfirmProvider } from "./context/ConfirmContext";
+import { TransferQueueProvider } from "./context/TransferQueueContext";
 import { useTranslation } from "react-i18next";
 
 const queryClient = new QueryClient();
@@ -154,7 +155,9 @@ function App() {
         <QueryClientProvider client={queryClient}>
           <ConfirmProvider>
             <SettingsProvider>
-              <AppContent />
+              <TransferQueueProvider>
+                <AppContent />
+              </TransferQueueProvider>
             </SettingsProvider>
           </ConfirmProvider>
         </QueryClientProvider>
