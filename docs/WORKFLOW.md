@@ -44,6 +44,30 @@ sequenceDiagram
     end
 ```
 
+### 1.1. Alur Autentikasi QR Code (Dengan Dukungan 2FA)
+
+Jika pengguna memilih menggunakan metode QR Code:
+
+1. **Memulai Otorisasi (`/api/auth/qr/start`):**
+   * Browser mengirim request berisi API ID & API Hash ke server backend.
+   * Server menginisialisasi `TelegramClient` baru, menghubungkannya, dan menjalankan fungsi `client.signInUserWithQrCode()` di latar belakang (background task).
+   * Callback `qrCode` di backend menerima token mentah dari Telegram, mengubahnya menjadi tautan standar `tg://login?token=<token_base64>`, lalu menyimpannya di memori sesi sementara (`pendingLogins`).
+   * Server membalas ke peramban dengan URL QR tersebut. Peramban lalu menampilkannya sebagai gambar QR Code menggunakan SVG renderer.
+
+2. **Polling Status (`/api/auth/qr/status`):**
+   * Peramban melakukan ping secara berkala setiap 3 detik ke backend untuk menanyakan status scan QR.
+   * **Skenario Tanpa 2FA:** Ketika pengguna menyetujui perangkat baru di HP mereka, background task sukses masuk. Sesi disimpan terenkripsi ke database Supabase, dan status polling mengembalikan `{ success: true, next_step: 'dashboard' }`.
+   * **Skenario Dengan 2FA (Verifikasi Dua Langkah):**
+     * Telegram meminta sandi cloud. Ini memicu callback `password` di backend.
+     * Callback backend menunda (stall) eksekusi dengan `Promise` tertunda dan mengubah status sesi menjadi `password_needed`.
+     * Request polling berikutnya mendeteksi status ini dan mengembalikan `{ success: false, next_step: 'password', hint: 'Petunjuk Sandi' }`.
+     * Peramban otomatis berpindah ke layar input kata sandi cloud 2FA.
+
+3. **Verifikasi Kata Sandi (`/api/auth/password`):**
+   * Pengguna memasukkan sandi cloud dan mengirimkannya ke backend.
+   * Backend memanggil fungsi penyelesaian `passwordResolve(password)` untuk meneruskan sandi ke GramJS.
+   * GramJS menyelesaikan otentikasi di latar belakang. Jika berhasil, sesi disimpan ke Supabase dan pengguna dialihkan ke dashboard utama.
+
 ---
 
 ## 2. Pendaftaran Berbasis Undangan (Invite-Only Registration)

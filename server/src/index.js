@@ -190,6 +190,29 @@ app.post('/api/auth/logout', checkAuth, async (req, res) => {
   }
 });
 
+app.post('/api/auth/qr/start', checkAuth, async (req, res) => {
+  const { api_id, api_hash } = req.body;
+  if (!api_id || !api_hash) {
+    return res.status(400).json({ error: 'api_id and api_hash required' });
+  }
+
+  try {
+    const result = await tg.startQrLogin(req.user.id, api_id, api_hash);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/auth/qr/status', checkAuth, async (req, res) => {
+  try {
+    const result = await tg.checkQrStatus(req.user.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/auth/status', checkAuth, async (req, res) => {
   try {
     const client = await getClientForUser(req.user.id);

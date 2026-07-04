@@ -59,6 +59,15 @@ export const api = {
       body: JSON.stringify({ api_id: apiId, api_hash: apiHash }),
     }),
 
+  startQrLogin: (apiId: number, apiHash: string) =>
+    request<{ success: boolean; qr_url?: string; error?: string }>('/api/auth/qr/start', {
+      method: 'POST',
+      body: JSON.stringify({ api_id: apiId, api_hash: apiHash }),
+    }),
+
+  checkQrStatus: () =>
+    request<{ success: boolean; qr_url?: string; next_step?: string; error?: string }>('/api/auth/qr/status'),
+
   requestCode: (phone: string, apiId: number, apiHash?: string) =>
     request<{ success: boolean; next_step?: string; error?: string }>('/api/auth/code', {
       method: 'POST',

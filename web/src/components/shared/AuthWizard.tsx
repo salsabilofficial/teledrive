@@ -111,12 +111,19 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
     const handleQrLogin = async () => {
         setError(null);
         setLoading(true);
+        setQrUrl(null);
         try {
             const idInt = parseInt(apiId, 10);
             if (isNaN(idInt)) throw new Error("API ID must be a number");
 
-            setQrUrl(`tg://login?token=demo_web_qr_${idInt}`);
-            setQrPolling(true);
+            const res = await api.startQrLogin(idInt, apiHash);
+            if (res.error) throw new Error(res.error);
+            if (res.qr_url) {
+                setQrUrl(res.qr_url);
+                setQrPolling(true);
+            } else {
+                throw new Error("Failed to retrieve login QR code from server.");
+            }
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -135,8 +142,24 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
 
         qrPollRef.current = setInterval(async () => {
             try {
-                // QR polling is not available in web version
-            } catch {
+                const res = await api.checkQrStatus();
+                if (res.success) {
+                    if (qrPollRef.current) clearInterval(qrPollRef.current);
+                    setQrPolling(false);
+                    onLogin();
+                } else if (res.error) {
+                    setError(res.error);
+                    setQrPolling(false);
+                } else if (res.next_step === 'password') {
+                    if (qrPollRef.current) clearInterval(qrPollRef.current);
+                    setQrPolling(false);
+                    setStep('password');
+                } else if (res.qr_url) {
+                    // Update QR URL if token gets refreshed
+                    setQrUrl(res.qr_url);
+                }
+            } catch (err: unknown) {
+                console.error("QR Poll error:", err);
             }
         }, 3000);
 
@@ -146,7 +169,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                 qrPollRef.current = null;
             }
         };
-    }, [qrPolling, apiId, apiHash]);
+    }, [qrPolling]);
 
     const handlePhoneSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

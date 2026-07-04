@@ -141,6 +141,26 @@ export async function checkPassword(userId, password) {
   const context = pendingLogins.get(userId);
   if (!context) throw new Error("Session context not found.");
 
+  // If this is a QR login with 2FA pending
+  if (context.passwordResolve) {
+    context.qrStatus = 'submitting_password';
+    context.passwordResolve(password);
+
+    // Wait for the background QR login promise to complete or fail
+    try {
+      await context.qrPromise;
+      return { success: true, next_step: 'dashboard' };
+    } catch (e) {
+      // If password failed, reset status so user can try again
+      context.qrStatus = 'password_needed';
+      // Re-create the promise deferral for subsequent attempts
+      context.qrPromise = new Promise((resolve) => {
+        context.passwordResolve = resolve;
+      });
+      throw e;
+    }
+  }
+
   const { client, apiId, apiHash } = context;
   if (!client.connected) await client.connect();
 
@@ -446,3 +466,116 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     }
   }
 }
+
+/**
+ * Start background QR login process for a user.
+ */
+export async function startQrLogin(userId, apiId, apiHash) {
+  const client = await initClientForUser(userId, apiId, apiHash);
+  await client.connect();
+
+  const context = pendingLogins.get(userId);
+  if (!context) throw new Error("Initialization failed");
+
+  context.qrUrl = null;
+  context.qrError = null;
+  context.qrSuccess = false;
+
+  // Run GramJS's built-in QR auth loop in the background
+  context.qrPromise = client.signInUserWithQrCode(
+    { apiId: parseInt(apiId), apiHash },
+    {
+      password: async (hint) => {
+        context.qrStatus = 'password_needed';
+        context.passwordHint = hint;
+        return new Promise((resolve) => {
+          context.passwordResolve = resolve;
+        });
+      },
+      qrCode: async (code) => {
+        const tokenStr = code.token.toString("base64url");
+        context.qrUrl = `tg://login?token=${tokenStr}`;
+      },
+      onError: async (err) => {
+        console.error("[Telegram] QR auth loop error:", err);
+        context.qrError = err.message || String(err);
+        return true; // Return true to stop the auth process
+      }
+    }
+  ).then(async (user) => {
+    context.qrSuccess = true;
+
+    // Save session on successful scan
+    const sessionString = client.session.save();
+    const apiHashEncrypted = encrypt(apiHash);
+    const sessionStringEncrypted = encrypt(sessionString);
+
+    const { error } = await supabase
+      .from('telegram_sessions')
+      .upsert({
+        user_id: userId,
+        api_id: parseInt(apiId),
+        api_hash_encrypted: apiHashEncrypted,
+        session_string_encrypted: sessionStringEncrypted,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+
+    if (error) {
+      throw new Error(`Failed to save Telegram session: ${error.message}`);
+    }
+
+    // Move to active connection map
+    activeClients.set(userId, {
+      client,
+      lastActive: Date.now()
+    });
+    pendingLogins.delete(userId);
+
+    return user;
+  }).catch((err) => {
+    context.qrError = err.message || String(err);
+  });
+
+  // Wait for the first token callback to trigger and populated qrUrl
+  for (let i = 0; i < 15; i++) {
+    if (context.qrUrl || context.qrError) break;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  if (context.qrError) {
+    throw new Error(context.qrError);
+  }
+
+  return { qr_url: context.qrUrl };
+}
+
+/**
+ * Check the status of a pending QR login.
+ */
+export async function checkQrStatus(userId) {
+  const context = pendingLogins.get(userId);
+
+  if (!context) {
+    if (activeClients.has(userId)) {
+      return { success: true, next_step: 'dashboard' };
+    }
+    return { success: false, error: "QR Login process not started." };
+  }
+
+  if (context.qrError) {
+    const errorMsg = context.qrError;
+    pendingLogins.delete(userId);
+    return { success: false, error: errorMsg };
+  }
+
+  if (context.qrSuccess) {
+    return { success: true, next_step: 'dashboard' };
+  }
+
+  if (context.qrStatus === 'password_needed') {
+    return { success: false, next_step: 'password', hint: context.passwordHint };
+  }
+
+  return { success: false, qr_url: context.qrUrl };
+}
+
