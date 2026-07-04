@@ -169,4 +169,13 @@ export const api = {
     const queryString = q.toString() ? `?${q.toString()}` : '';
     return `${API_BASE}/api/files/${messageId}/download${queryString}`;
   },
+
+  getThumbnailUrl: (messageId: number, folder_id?: number | null): string => {
+    const q = new URLSearchParams();
+    if (folder_id != null) q.set('folder_id', String(folder_id));
+    q.set('thumbnail', 'true');
+    if (activeAccessToken) q.set('token', activeAccessToken);
+    const queryString = q.toString() ? `?${q.toString()}` : '';
+    return `${API_BASE}/api/files/${messageId}/download${queryString}`;
+  },
 };

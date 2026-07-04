@@ -56,7 +56,7 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
         if (isFolder) return;
         if (isImageFile(file.name)) {
             setThumbnailLoading(true);
-            const url = api.getDownloadUrl(file.id, file.folder_id ?? null);
+            const url = api.getThumbnailUrl(file.id, file.folder_id ?? null);
             setThumbnail(url);
             setThumbnailLoading(false);
         } else {

@@ -388,6 +388,22 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     throw new Error("File not found on Telegram");
   }
 
+  if (req.query.thumbnail === 'true') {
+    try {
+      const thumbnailBuffer = await client.downloadMedia(message.media, {
+        thumb: 0,
+      });
+      if (thumbnailBuffer && thumbnailBuffer.length > 0) {
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Content-Length', thumbnailBuffer.length.toString());
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+        return res.send(thumbnailBuffer);
+      }
+    } catch (err) {
+      console.error("[Telegram] Failed to download thumbnail, falling back to full media:", err);
+    }
+  }
+
   const doc = message.media.document;
   const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
   const fileName = fileAttr ? fileAttr.fileName : `file_${messageId}`;
