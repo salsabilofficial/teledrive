@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff } from 'lucide-react';
+import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff, LayoutGrid, List } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BottomNavBar, TabType } from './BottomNavBar';
@@ -17,6 +17,7 @@ import { formatBytes, isMediaFile, isPdfFile, isImageFile, nativeShareOrCopy, co
 import { MediaPlayer } from '../desktop/dashboard/MediaPlayer';
 import { PdfViewer } from '../desktop/dashboard/PdfViewer';
 import { PreviewModal } from '../desktop/dashboard/PreviewModal';
+import { FileCard } from '../desktop/dashboard/FileCard';
 import { useTheme } from '../../context/ThemeContext';
 import { TelegramFile, TelegramFolder } from '../../types';
 import { useSettings } from '../../context/SettingsContext';
@@ -32,6 +33,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   const { isAndroid } = usePlatform();
   const { theme } = useTheme();
   const { settings, updateSetting } = useSettings();
+  const viewMode = settings.viewMode || 'list';
 
   const logoutHandler = useMemo(() => onLogout || (() => {}), [onLogout]);
 
@@ -367,6 +369,13 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => updateSetting('viewMode', viewMode === 'grid' ? 'list' : 'grid')}
+                    className="flex items-center justify-center p-2 rounded-xl bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10 active:scale-95 transition-all duration-200"
+                    aria-label="Toggle view mode"
+                  >
+                    {viewMode === 'grid' ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
                     onClick={handleSyncFolders}
                     disabled={isSyncing}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10 active:scale-95 transition-all duration-200 disabled:opacity-50"
@@ -377,26 +386,55 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                 </div>
               </div>
 
-            <TouchFileList
-              files={displayFiles}
-              isLoading={isLoading}
-              onDownload={handleDownload}
-              onDelete={handleDeleteFile}
-              onPreview={handlePreview}
-              onRename={handleRenameFile}
-              onShare={setShareFile}
-              onCopyTelegramLink={handleCopyTelegramLink}
-              onBulkShare={handleBulkShare}
-              selectedIds={selectedIds}
-              onToggleSelection={handleToggleSelection}
-              onSelectAll={handleSelectAll}
-              onClearSelection={handleClearSelection}
-              onBulkDelete={handleBulkDelete}
-              onBulkDownload={handleBulkDownload}
-              onBulkMove={handleBulkMove}
-              folders={folders}
-              activeFolderId={activeFolderId}
-            />
+            {viewMode === 'grid' && !isLoading && displayFiles.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 pb-24">
+                {displayFiles.map((file) => {
+                  const isSelected = selectedIds.includes(file.id);
+                  return (
+                    <FileCard
+                      key={file.id}
+                      file={file}
+                      isSelected={isSelected}
+                      onToggleSelection={() => handleToggleSelection(file.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selectedIds.length > 0) {
+                          handleToggleSelection(file.id);
+                        } else {
+                          handlePreview(file);
+                        }
+                      }}
+                      onDownload={() => handleDownload(file)}
+                      onDelete={() => handleDeleteFile(file)}
+                      onPreview={() => handlePreview(file)}
+                      onShare={() => setShareFile(file)}
+                      activeFolderId={activeFolderId}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <TouchFileList
+                files={displayFiles}
+                isLoading={isLoading}
+                onDownload={handleDownload}
+                onDelete={handleDeleteFile}
+                onPreview={handlePreview}
+                onRename={handleRenameFile}
+                onShare={setShareFile}
+                onCopyTelegramLink={handleCopyTelegramLink}
+                onBulkShare={handleBulkShare}
+                selectedIds={selectedIds}
+                onToggleSelection={handleToggleSelection}
+                onSelectAll={handleSelectAll}
+                onClearSelection={handleClearSelection}
+                onBulkDelete={handleBulkDelete}
+                onBulkDownload={handleBulkDownload}
+                onBulkMove={handleBulkMove}
+                folders={folders}
+                activeFolderId={activeFolderId}
+              />
+            )}
           </div>
 
           {/* Floating Action Button (FAB) for Upload */}
