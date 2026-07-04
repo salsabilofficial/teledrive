@@ -363,32 +363,30 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                     exit={{ x: -20, opacity: 0 }}
                                     className="space-y-6"
                                 >
-                                    {!isMobile && (
-                                        <div className="flex rounded-xl overflow-hidden border border-white/10">
-                                            <button
-                                                type="button"
-                                                onClick={() => { setLoginMethod('phone'); setQrUrl(null); setQrPolling(false); setError(null); }}
-                                                className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-all ${
-                                                    loginMethod === 'phone'
-                                                        ? 'bg-white/15 text-white'
-                                                        : 'text-white/50 hover:text-white/70'
-                                                }`}
-                                            >
-                                                <Phone className="w-4 h-4" /> Phone Number
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => { setLoginMethod('qr'); setError(null); handleQrLogin(); }}
-                                                className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-all ${
-                                                    loginMethod === 'qr'
-                                                        ? 'bg-white/15 text-white'
-                                                        : 'text-white/50 hover:text-white/70'
-                                                }`}
-                                            >
-                                                <QrCode className="w-4 h-4" /> QR Code
-                                            </button>
-                                        </div>
-                                    )}
+                                    <div className="flex rounded-xl overflow-hidden border border-white/10">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setLoginMethod('phone'); setQrUrl(null); setQrPolling(false); setError(null); }}
+                                            className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                                                loginMethod === 'phone'
+                                                    ? 'bg-white/15 text-white'
+                                                    : 'text-white/50 hover:text-white/70'
+                                            }`}
+                                        >
+                                            <Phone className="w-4 h-4" /> Phone Number
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setLoginMethod('qr'); setError(null); handleQrLogin(); }}
+                                            className={`flex-1 py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                                                loginMethod === 'qr'
+                                                    ? 'bg-white/15 text-white'
+                                                    : 'text-white/50 hover:text-white/70'
+                                            }`}
+                                        >
+                                            <QrCode className="w-4 h-4" /> QR Code
+                                        </button>
+                                    </div>
 
                                     {loginMethod === 'phone' ? (
                                         <form onSubmit={handlePhoneSubmit} className="space-y-6">
@@ -428,7 +426,11 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                             )}
                                             {qrUrl && (
                                                 <>
-                                                    <div className="p-4 bg-white rounded-2xl shadow-xl">
+                                                    <a
+                                                        href={qrUrl}
+                                                        className="p-4 bg-white rounded-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform block cursor-pointer"
+                                                        title="Tap to open Telegram directly"
+                                                    >
                                                         <QRCodeSVG
                                                             value={qrUrl}
                                                             size={200}
@@ -436,10 +438,18 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                                             bgColor="#ffffff"
                                                             fgColor="#000000"
                                                         />
-                                                    </div>
+                                                    </a>
                                                     <div className="text-center space-y-1">
-                                                        <p className="text-sm text-white/80">Scan with your Telegram app</p>
-                                                        <p className="text-xs text-white/40">Settings &gt; Devices &gt; Link Desktop Device</p>
+                                                        {isMobile ? (
+                                                            <p className="text-sm text-blue-300 font-bold animate-pulse">
+                                                                Tap the QR code to log in via Telegram app
+                                                            </p>
+                                                        ) : (
+                                                            <>
+                                                                <p className="text-sm text-white/80">Scan with your Telegram app</p>
+                                                                <p className="text-xs text-white/40">Settings &gt; Devices &gt; Link Desktop Device</p>
+                                                            </>
+                                                        )}
                                                     </div>
                                                     {qrPolling && (
                                                         <div className="flex items-center gap-2 text-xs text-blue-300">

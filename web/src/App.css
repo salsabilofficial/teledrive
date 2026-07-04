@@ -88,6 +88,10 @@ body,
   color: rgba(26, 26, 26, 0.7);
 }
 
+:root.light .auth-glass .text-white\/50 {
+  color: rgba(26, 26, 26, 0.5);
+}
+
 :root.light .auth-glass .text-gray-400 {
   color: #555;
 }
