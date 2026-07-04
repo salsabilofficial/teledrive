@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import busboy from 'busboy';
+import fs from 'fs';
+import path from 'path';
 import { rateLimit } from 'express-rate-limit';
 import * as tg from './telegram.js';
 import { supabase } from './supabase.js';
@@ -362,12 +364,13 @@ app.patch('/api/files/:id', checkAuth, async (req, res) => {
 });
 
 app.post('/api/files/upload', checkAuth, uploadLimiter, async (req, res) => {
-  const folderId = req.query.folder_id || '';
+  let folderId = req.query.folder_id || '';
 
   const client = await getClientForUser(req.user.id).catch(() => null);
   if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-  let fileBuffer = [];
+  let tempFilePath = '';
+  let writeStream = null;
   let fileName = 'upload';
   let mimeType = 'application/octet-stream';
   let totalBytes = 0;
@@ -383,12 +386,35 @@ app.post('/api/files/upload', checkAuth, uploadLimiter, async (req, res) => {
     fileName = info.filename || 'upload';
     mimeType = info.mimeType || 'application/octet-stream';
 
+    const tempDir = path.join(process.cwd(), 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    tempFilePath = path.join(tempDir, `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.tmp`);
+    writeStream = fs.createWriteStream(tempFilePath);
+
     fileStream.on('data', (chunk) => {
-      fileBuffer.push(chunk);
-      totalBytes += chunk.length;
+      if (writeStream) {
+        writeStream.write(chunk);
+        totalBytes += chunk.length;
+      }
+    });
+
+    fileStream.on('end', () => {
+      if (writeStream) {
+        writeStream.end();
+      }
     });
 
     fileStream.on('limit', () => {
+      if (writeStream) {
+        writeStream.end();
+        try {
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+        } catch (_) {}
+      }
       res.status(413).json({ error: 'File exceeds 2GB limit' });
       bb.destroy();
     });
@@ -397,8 +423,20 @@ app.post('/api/files/upload', checkAuth, uploadLimiter, async (req, res) => {
   bb.on('finish', async () => {
     if (res.headersSent) return;
     try {
-      const buffer = Buffer.concat(fileBuffer);
-      const result = await tg.uploadFileFromBuffer(client, folderId, buffer, fileName, mimeType);
+      if (!tempFilePath || !fs.existsSync(tempFilePath)) {
+        throw new Error("No file was uploaded or file stream failed.");
+      }
+
+      if (writeStream) {
+        await new Promise((resolve) => {
+          writeStream.on('finish', resolve);
+          if (writeStream.writableFinished) {
+            resolve();
+          }
+        });
+      }
+
+      const result = await tg.uploadFileFromPath(client, folderId, tempFilePath, fileName, mimeType);
       res.json(result);
     } catch (e) {
       console.error('Upload error:', e);
@@ -406,7 +444,13 @@ app.post('/api/files/upload', checkAuth, uploadLimiter, async (req, res) => {
         res.status(500).json({ error: e.message });
       }
     } finally {
-      fileBuffer = [];
+      try {
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      } catch (err) {
+        console.error('Failed to delete temp file:', err);
+      }
     }
   });
 

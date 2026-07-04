@@ -5,6 +5,7 @@ import { pendingLogins, activeClients, removeClient } from './clientManager.js';
 import { encrypt } from './crypto.js';
 import { supabase } from './supabase.js';
 import bigInt from 'big-integer';
+import fs from 'fs';
 
 // ===== AUTH FLOWS FOR USER PORTAL =====
 
@@ -353,13 +354,14 @@ export async function uploadFile(client, folderId, filePath, fileName) {
 }
 
 /**
- * Upload a file directly from a Buffer (no disk I/O).
+ * Upload a file by streaming it from a local disk path (protects RAM and allows files > 20MB).
  */
-export async function uploadFileFromBuffer(client, folderId, buffer, fileName, mimeType) {
+export async function uploadFileFromPath(client, folderId, filePath, fileName, mimeType) {
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
 
-  const fileToUpload = new CustomFile(fileName, buffer.length, "", buffer);
+  const fileSize = fs.statSync(filePath).size;
+  const fileToUpload = new CustomFile(fileName, fileSize, filePath);
 
   const message = await client.sendFile(entity, {
     file: fileToUpload,
