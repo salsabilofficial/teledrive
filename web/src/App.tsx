@@ -1,10 +1,11 @@
 import React, { useState, useEffect, Suspense } from "react";
-import { load } from "./api/storage";
 import { api } from "./api/client";
 import { isMobileWeb } from "./api/platform";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthWizard } from "./components/shared/AuthWizard";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
+import { PortalAuth } from "./components/shared/PortalAuth";
+import { supabase } from "./api/supabase";
 import { Toaster } from "sonner";
 import "./App.css";
 
@@ -18,7 +19,7 @@ import { useTranslation } from "react-i18next";
 
 const queryClient = new QueryClient();
 
-type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+type AuthStatus = "loading" | "portal_unauthenticated" | "telegram_unauthenticated" | "telegram_authenticated";
 
 function AppContent() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
@@ -60,38 +61,41 @@ function AppContent() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const store = await load("config");
-        const savedId = await store.get<string>("api_id");
-
-        if (!savedId) {
-          setAuthStatus("unauthenticated");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setAuthStatus("portal_unauthenticated");
           return;
         }
 
-        const apiId = parseInt(savedId, 10);
-        if (isNaN(apiId)) {
-          setAuthStatus("unauthenticated");
-          return;
-        }
-
-        await api.connect(apiId);
-        const status = await api.authStatus();
-
+        const status = await api.authStatus().catch(() => ({ authenticated: false }));
         if (status.authenticated) {
-          setAuthStatus("authenticated");
+          setAuthStatus("telegram_authenticated");
         } else {
-          setAuthStatus("unauthenticated");
+          setAuthStatus("telegram_unauthenticated");
         }
       } catch {
-        try {
-          const store = await load("config");
-          await store.delete("api_id");
-        } catch {}
-        setAuthStatus("unauthenticated");
+        setAuthStatus("portal_unauthenticated");
       }
     };
 
     checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const status = await api.authStatus().catch(() => ({ authenticated: false }));
+        if (status.authenticated) {
+          setAuthStatus("telegram_authenticated");
+        } else {
+          setAuthStatus("telegram_unauthenticated");
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setAuthStatus("portal_unauthenticated");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (authStatus === "loading") {
@@ -108,7 +112,7 @@ function AppContent() {
   return (
     <main className="absolute inset-0 text-telegram-text overflow-hidden selection:bg-telegram-primary/30">
       <Toaster theme={theme} position="bottom-center" />
-      {authStatus === "authenticated" && (
+      {authStatus === "telegram_authenticated" && (
         <Suspense fallback={
           <div className="h-screen w-screen flex flex-col items-center justify-center bg-telegram-bg">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-telegram-primary"></div>
@@ -116,17 +120,28 @@ function AppContent() {
         }>
           {isMobile ? (
             <ErrorBoundary>
-              <MobileDashboard onLogout={() => setAuthStatus("unauthenticated")} />
+              <MobileDashboard onLogout={async () => {
+                await api.logout();
+                await supabase.auth.signOut();
+              }} />
             </ErrorBoundary>
           ) : (
             <ErrorBoundary>
-              <DesktopDashboard onLogout={() => setAuthStatus("unauthenticated")} />
+              <DesktopDashboard onLogout={async () => {
+                await api.logout();
+                await supabase.auth.signOut();
+              }} />
             </ErrorBoundary>
           )}
         </Suspense>
       )}
-      {authStatus === "unauthenticated" && (
-        <AuthWizard onLogin={() => setAuthStatus("authenticated")} />
+      {authStatus === "telegram_unauthenticated" && (
+        <AuthWizard onLogin={() => setAuthStatus("telegram_authenticated")} />
+      )}
+      {authStatus === "portal_unauthenticated" && (
+        <PortalAuth onAuthenticated={() => {
+          // Auth status is automatically updated by onAuthStateChange listener
+        }} />
       )}
     </main>
   );

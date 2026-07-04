@@ -1,5 +1,4 @@
-import { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface ActionItem {
   label: string;
@@ -20,34 +19,58 @@ interface ActionPopoverProps {
  */
 export function ActionPopover({ actions, onClose, title }: ActionPopoverProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    // Trigger entrance animation
+    const timer = requestAnimationFrame(() => setIsMounted(true));
+    return () => cancelAnimationFrame(timer);
+  }, []);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+    }, 250); // duration matches transition duration (250ms)
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, []);
 
   return (
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={(e) => {
-        if (e.target === backdropRef.current) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-[200] flex items-end justify-center pointer-events-none">
+      {/* Backdrop (fades independently) */}
       <div
-        className="w-full max-w-lg bg-[#1c1c1e] border border-white/10 rounded-t-3xl p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom duration-300"
+        ref={backdropRef}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-in-out pointer-events-auto ${
+          isMounted && !isClosing ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={handleClose}
+      />
+
+      {/* Drawer Sheet (slides down solidly without fading) */}
+      <div
+        className={`relative z-10 w-full max-w-lg bg-telegram-surface border-t border-telegram-border/40 rounded-t-3xl p-5 pb-8 shadow-2xl transition-transform duration-300 ease-out transform pointer-events-auto ${
+          isMounted && !isClosing ? 'translate-y-0' : 'translate-y-full'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drag handle */}
-        <div className="flex justify-center mb-4">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
+        {/* Drag handle (clickable to close) */}
+        <div 
+          className="flex justify-center mb-4 cursor-pointer py-1.5 -mt-1 active:scale-95 transition-transform" 
+          onClick={handleClose}
+        >
+          <div className="w-10 h-1 rounded-full bg-telegram-border/50 hover:bg-telegram-border/80 transition-colors" />
         </div>
 
         {title && (
-          <h3 className="text-sm font-bold text-white mb-4 px-1 truncate">{title}</h3>
+          <h3 className="text-sm font-bold text-telegram-text mb-4 px-1 truncate">{title}</h3>
         )}
 
         <div className="space-y-1.5">
@@ -56,12 +79,12 @@ export function ActionPopover({ actions, onClose, title }: ActionPopoverProps) {
               key={i}
               onClick={() => {
                 action.onClick();
-                onClose();
+                handleClose();
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${
                 action.destructive
-                  ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20'
-                  : 'bg-white/5 text-white hover:bg-white/10 border border-white/5'
+                  ? 'bg-red-500/15 text-red-500 hover:bg-red-500/25 border border-red-500/20'
+                  : 'bg-telegram-hover/30 text-telegram-text hover:bg-telegram-hover/50 border border-telegram-border/20'
               }`}
             >
               {action.icon && <span className="flex-shrink-0">{action.icon}</span>}
@@ -69,15 +92,6 @@ export function ActionPopover({ actions, onClose, title }: ActionPopoverProps) {
             </button>
           ))}
         </div>
-
-        {/* Cancel button */}
-        <button
-          onClick={onClose}
-          className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold bg-white/5 text-telegram-subtext hover:bg-white/10 border border-white/5 transition-all duration-200 active:scale-[0.98]"
-        >
-          <X className="w-4 h-4" />
-          Cancel
-        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, Key, Lock, ArrowRight, Settings, ShieldCheck, Sun, Moon, HelpCircle, ExternalLink, X, Heart, QrCode } from "lucide-react";
+import { Phone, Key, Lock, ArrowRight, Settings, ShieldCheck, Sun, Moon, HelpCircle, ExternalLink, X, QrCode } from "lucide-react";
 import { useTheme } from '../../context/ThemeContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../../api/client';
@@ -37,7 +37,6 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
     const [error, setError] = useState<string | null>(null);
     const [floodWait, setFloodWait] = useState<number | null>(null);
     const [showHelp, setShowHelp] = useState(false);
-    const [showDonate, setShowDonate] = useState(false);
     const [loginMethod, setLoginMethod] = useState<'phone' | 'qr'>('phone');
     const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent.toLowerCase());
 
@@ -157,7 +156,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
             const idInt = parseInt(apiId, 10);
             if (isNaN(idInt)) throw new Error("API ID must be a number");
 
-            const res = await api.requestCode(phone, idInt);
+            const res = await api.requestCode(phone, idInt, apiHash);
             if (res.success) {
                 setStep("code");
             } else if (res.error) {
@@ -541,15 +540,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                     </motion.div>
                 )}
 
-                <div className="mt-8 pt-4 border-t border-white/5 text-center">
-                    <button
-                        onClick={() => setShowDonate(true)}
-                        className="text-xs text-telegram-subtext hover:text-telegram-text transition-colors flex items-center justify-center gap-1.5 mx-auto"
-                    >
-                        <Heart className="w-3.5 h-3.5 text-red-500/80" />
-                        Donate
-                    </button>
-                </div>
+
             </motion.div>
 
 
@@ -633,54 +624,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                 )}
             </AnimatePresence>
 
-            <AnimatePresence>
-                {showDonate && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-                        onClick={() => setShowDonate(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="glass bg-telegram-surface border border-telegram-border rounded-2xl p-6 max-w-sm w-full shadow-2xl"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="relative flex items-center justify-center mb-6">
-                                <h2 className="text-xl font-bold text-telegram-text text-center">
-                                    Support the Project
-                                </h2>
-                                <button onClick={() => setShowDonate(false)} className="absolute right-0 p-2 hover:bg-telegram-hover rounded-lg transition-colors">
-                                    <X className="w-5 h-5 text-telegram-subtext" />
-                                </button>
-                            </div>
 
-                            <div className="space-y-4 text-center">
-                                <p className="text-sm text-telegram-subtext mb-6">
-                                    If you find Telegram Drive useful, consider supporting its development!
-                                </p>
-
-                                <div className="space-y-4">
-                                    <a href="#" onClick={(e) => { e.preventDefault(); window.open('https://www.paypal.me/Caamer20', '_blank'); }} className="block hover:opacity-80 transition-opacity">
-                                        <img src="https://raw.githubusercontent.com/stefan-niedermann/paypal-donate-button/master/paypal-donate-button.png" alt="Donate with PayPal" width="200" className="mx-auto" />
-                                    </a>
-
-                                    <a href="#" onClick={(e) => { e.preventDefault(); window.open('https://link.trustwallet.com/send?address=ltc1q6wkr5ac4u0pxx4hx7xgwn0gsaku25ws0df73rp&asset=c2', '_blank'); }} className="block hover:opacity-80 transition-opacity">
-                                        <img src="https://img.shields.io/badge/Donate-LTC-345D9D?style=for-the-badge&logo=litecoin&logoColor=white" alt="Donate LTC" className="mx-auto h-[28px]" />
-                                    </a>
-
-                                    <a href="#" onClick={(e) => { e.preventDefault(); window.open('https://link.trustwallet.com/send?asset=c0&address=bc1q5pt7m2fk6w0dzsnf6vvd5k6nw5k44785286ujy', '_blank'); }} className="block hover:opacity-80 transition-opacity">
-                                        <img src="https://img.shields.io/badge/Donate-BTC-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white" alt="Donate BTC" className="mx-auto h-[28px]" />
-                                    </a>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             <div className="fixed top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none -z-10" />
             <div className="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-[100px] pointer-events-none -z-10" />

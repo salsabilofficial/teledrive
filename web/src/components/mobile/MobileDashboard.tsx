@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { BottomNavBar } from './BottomNavBar';
 import { TouchFileList } from './TouchFileList';
 import { ThemeToggle } from '../shared/ThemeToggle';
-import AdsterraBanner from '../shared/AdsterraBanner';
 import { ActionPopover, ActionItem } from './ActionPopover';
 import { ShareDialog } from '../desktop/dashboard/ShareDialog';
 import { RenameFolderSheet } from './RenameFolderSheet';
@@ -24,6 +23,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { version as appVersion } from '../../../package.json';
 import { LANGUAGES } from '../../i18n/languages';
 import { useTranslation } from 'react-i18next';
+import { api } from '../../api/client';
 
 export default function MobileDashboard({ onLogout }: { onLogout?: () => void }) {
   const { t } = useTranslation();
@@ -67,11 +67,16 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
     }, 1000);
   }, []);
 
-  const adVisible = !playingFile && !pdfFile && !previewFile && !shareFile && !bulkShareLinks;
-
   const { data: allFiles = [], isLoading } = useQuery({
     queryKey: ['files', activeFolderId],
-    queryFn: () => Promise.resolve([] as any[]),
+    queryFn: async () => {
+        const result = await api.listFiles({ folder_id: activeFolderId });
+        return result.data.map((f: any) => ({
+            ...f,
+            sizeStr: formatBytes(f.size),
+            type: (f.icon_type as any) || 'file'
+        }));
+    },
     enabled: !!store,
   });
 
@@ -682,10 +687,6 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
       )}
 
       <BottomNavBar activeTab={activeTab} setActiveTab={setActiveTab} isAndroid={isAndroid} />
-
-      <div className="fixed bottom-[144px] left-0 right-0 z-[60]">
-        <AdsterraBanner visible={adVisible} />
-      </div>
 
       {playingFile && (
         <div className="fixed inset-0 z-[100] bg-black/90">

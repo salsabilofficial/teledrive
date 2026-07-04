@@ -1,30 +1,46 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
-import { initDb, getDb } from './db.js';
-import { randomUUID } from 'crypto';
-import path from 'path';
+import * as tg from './telegram.js';
+import { supabase } from './supabase.js';
+import { getClientForUser } from './clientManager.js';
 import fs from 'fs';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000');
 const upload = multer({ dest: 'uploads/' });
 
-app.use(cors());
+app.use(cors({
+  exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges']
+}));
 app.use(express.json());
 
-// Initialize database
-initDb();
+// JWT Authentication middleware using Supabase
+async function checkAuth(req, res, next) {
+  let token = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token;
+  }
 
-// In-memory Telegram session state (will be replaced with gramjs)
-const tgState = {
-  client: null,
-  apiId: null,
-  phone: null,
-  loginToken: null,
-  passwordToken: null,
-  authenticated: false,
-};
+  if (!token) {
+    return res.status(401).json({ error: 'Authorization token required' });
+  }
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: 'Invalid or expired session token' });
+    }
+    req.user = user;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
+}
 
 // ===== AUTH ROUTES =====
 
@@ -32,188 +48,292 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });
 });
 
-app.post('/api/auth/connect', (req, res) => {
-  const { api_id } = req.body;
-  if (!api_id) return res.status(400).json({ error: 'api_id required' });
-  tgState.apiId = api_id;
-  tgState.authenticated = false;
-  console.log(`Connected with API ID: ${api_id}`);
-  res.json({ success: true });
+app.post('/api/auth/register-invite', async (req, res) => {
+  const { email, password, token } = req.body;
+  if (!email || !password || !token) {
+    return res.status(400).json({ error: 'Email, password, and invite token are required' });
+  }
+
+  try {
+    // 1. Verify token in public.invitations table
+    const { data: invite, error: inviteError } = await supabase
+      .from('invitations')
+      .select('*')
+      .eq('token', token)
+      .is('used_at', null)
+      .maybeSingle();
+
+    if (inviteError || !invite) {
+      return res.status(400).json({ error: 'Invite token is invalid or has already been used' });
+    }
+
+    // 2. Create user in Supabase Auth using Admin API
+    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+      email: email,
+      password: password,
+      email_confirm: true // Confirm email automatically
+    });
+
+    if (createError) {
+      return res.status(400).json({ error: createError.message });
+    }
+
+    // 3. Mark invitation token as used
+    const { error: updateError } = await supabase
+      .from('invitations')
+      .update({ used_at: new Date().toISOString() })
+      .eq('token', token);
+
+    if (updateError) {
+      console.error('Failed to mark invitation token as used:', updateError);
+    }
+
+    res.json({ success: true, message: 'Account created successfully! You can now log in.' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/auth/code', (req, res) => {
-  const { phone, api_id } = req.body;
+app.post('/api/auth/connect', checkAuth, async (req, res) => {
+  const { api_id, api_hash } = req.body;
+  if (!api_id) return res.status(400).json({ error: 'api_id required' });
+
+  try {
+    await tg.initClientForUser(req.user.id, api_id, api_hash || '');
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/code', checkAuth, async (req, res) => {
+  const { phone, api_id, api_hash } = req.body;
   if (!phone || !api_id) return res.status(400).json({ error: 'phone and api_id required' });
 
-  tgState.apiId = api_id;
-  tgState.phone = phone;
-  tgState.loginToken = { phone };
-
-  console.log(`Requesting code for ${phone}`);
-  res.json({ success: true, next_step: 'code' });
+  try {
+    const result = await tg.requestCode(req.user.id, phone, api_id, api_hash || '');
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/auth/sign-in', (req, res) => {
+app.post('/api/auth/sign-in', checkAuth, async (req, res) => {
   const { code } = req.body;
   if (!code) return res.status(400).json({ error: 'code required' });
 
-  tgState.authenticated = true;
-  tgState.passwordToken = null;
-  tgState.loginToken = null;
-
-  console.log(`Signed in with code`);
-  res.json({ success: true, next_step: 'dashboard' });
+  try {
+    const result = await tg.signIn(req.user.id, code);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/auth/password', (req, res) => {
+app.post('/api/auth/password', checkAuth, async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: 'password required' });
 
-  tgState.authenticated = true;
-  console.log(`2FA password verified`);
-  res.json({ success: true, next_step: 'dashboard' });
+  try {
+    const result = await tg.checkPassword(req.user.id, password);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  tgState.authenticated = false;
-  tgState.client = null;
-  tgState.loginToken = null;
-  tgState.passwordToken = null;
-  console.log('Logged out');
-  res.json({ success: true });
+app.post('/api/auth/logout', checkAuth, async (req, res) => {
+  try {
+    const result = await tg.logout(req.user.id);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/auth/status', (req, res) => {
-  res.json({ authenticated: tgState.authenticated });
+app.get('/api/auth/status', checkAuth, async (req, res) => {
+  try {
+    const client = await getClientForUser(req.user.id);
+    const isConnected = await tg.checkConnection(client);
+    res.json({ authenticated: isConnected });
+  } catch (e) {
+    res.json({ authenticated: false });
+  }
 });
 
 // ===== FOLDER ROUTES =====
 
-const DEFAULT_FOLDERS = [
-  { id: 1, name: 'Saved Messages', username: null, is_public: false },
-  { id: 2, name: 'Photos', username: null, is_public: false },
-  { id: 3, name: 'Documents', username: null, is_public: false },
-];
+app.get('/api/folders', checkAuth, async (req, res) => {
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-app.get('/api/folders', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  res.json({ data: DEFAULT_FOLDERS });
+    const folders = await tg.listFolders(client);
+    res.json({ data: folders });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/folders', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
+app.post('/api/folders', checkAuth, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
 
-  const newFolder = { id: Date.now(), name, username: null, is_public: false };
-  DEFAULT_FOLDERS.push(newFolder);
-  res.json(newFolder);
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const newFolder = await tg.createFolder(client, name);
+    res.json(newFolder);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.delete('/api/folders/:id', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  const id = parseInt(req.params.id);
-  const idx = DEFAULT_FOLDERS.findIndex(f => f.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Folder not found' });
-  DEFAULT_FOLDERS.splice(idx, 1);
-  res.json({ success: true });
+app.delete('/api/folders/:id', checkAuth, async (req, res) => {
+  const folderId = req.params.id;
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const result = await tg.deleteFolder(client, folderId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.patch('/api/folders/:id', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  const id = parseInt(req.params.id);
-  const folder = DEFAULT_FOLDERS.find(f => f.id === id);
-  if (!folder) return res.status(404).json({ error: 'Folder not found' });
-  folder.name = req.body.name || folder.name;
-  res.json({ success: true });
+app.patch('/api/folders/:id', checkAuth, async (req, res) => {
+  const folderId = req.params.id;
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const result = await tg.renameFolder(client, folderId, name);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ===== FILE ROUTES =====
 
-// Demo files for testing
-const DEMO_FILES = [
-  { id: 101, folder_id: 2, name: 'sunset_photo.jpg', size: 245760, mime_type: 'image/jpeg', file_ext: 'jpg', created_at: new Date().toISOString(), icon_type: 'file' },
-  { id: 102, folder_id: 2, name: 'vacation_2025.png', size: 1048576, mime_type: 'image/png', file_ext: 'png', created_at: new Date().toISOString(), icon_type: 'file' },
-  { id: 103, folder_id: 3, name: 'report.pdf', size: 512000, mime_type: 'application/pdf', file_ext: 'pdf', created_at: new Date().toISOString(), icon_type: 'file' },
-  { id: 104, folder_id: 3, name: 'notes.txt', size: 2048, mime_type: 'text/plain', file_ext: 'txt', created_at: new Date().toISOString(), icon_type: 'file' },
-  { id: 105, folder_id: 3, name: 'project_plan.docx', size: 153600, mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', file_ext: 'docx', created_at: new Date().toISOString(), icon_type: 'file' },
-  { id: 106, folder_id: null, name: 'video_demo.mp4', size: 52428800, mime_type: 'video/mp4', file_ext: 'mp4', created_at: new Date().toISOString(), icon_type: 'file' },
-];
-
-let fileIdCounter = 106;
-
-app.get('/api/files', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-
-  let files = [...DEMO_FILES];
-  const folderId = req.query.folder_id ? parseInt(req.query.folder_id) : null;
+app.get('/api/files', checkAuth, async (req, res) => {
+  const folderId = req.query.folder_id;
   const search = req.query.search || '';
   const page = parseInt(req.query.page || '1');
   const limit = parseInt(req.query.limit || '20');
 
-  if (folderId) {
-    files = files.filter(f => f.folder_id === folderId);
-  }
-  if (search) {
-    files = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()));
-  }
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-  res.json({ data: files, page, limit, total: files.length });
+    const files = await tg.listFiles(client, folderId, search);
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const paginatedFiles = files.slice(startIndex, startIndex + limit);
+
+    res.json({
+      data: paginatedFiles,
+      page,
+      limit,
+      total: files.length
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/files/search', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-
+app.get('/api/files/search', checkAuth, async (req, res) => {
+  const folderId = req.query.folder_id;
   const q = req.query.search || '';
-  const results = DEMO_FILES.filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
-  res.json({ data: results });
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const results = await tg.listFiles(client, folderId, q);
+    res.json({ data: results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/files/:id', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  const id = parseInt(req.params.id);
-  const file = DEMO_FILES.find(f => f.id === id);
-  if (!file) return res.status(404).json({ error: 'File not found' });
-  res.json(file);
+app.get('/api/files/:id', checkAuth, async (req, res) => {
+  const messageId = req.params.id;
+  const folderId = req.query.folder_id;
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const files = await tg.listFiles(client, folderId);
+    const file = files.find(f => f.id === parseInt(messageId));
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    res.json(file);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.delete('/api/files/:id', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  const id = parseInt(req.params.id);
-  const idx = DEMO_FILES.findIndex(f => f.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'File not found' });
-  DEMO_FILES.splice(idx, 1);
+app.delete('/api/files/:id', checkAuth, async (req, res) => {
+  const messageId = req.params.id;
+  const folderId = req.query.folder_id;
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const result = await tg.deleteFile(client, folderId, messageId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/files/:id', checkAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-app.patch('/api/files/:id', (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
-  const id = parseInt(req.params.id);
-  const file = DEMO_FILES.find(f => f.id === id);
-  if (!file) return res.status(404).json({ error: 'File not found' });
-  if (req.body.name) file.name = req.body.name;
-  if (req.body.folder_id) file.folder_id = req.body.folder_id;
-  res.json({ success: true });
-});
-
-app.post('/api/files/upload', upload.single('file'), (req, res) => {
-  if (!tgState.authenticated) return res.status(401).json({ error: 'Not authenticated' });
+app.post('/api/files/upload', checkAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const folderId = req.body.folder_id ? parseInt(req.body.folder_id) : null;
-  fileIdCounter++;
-  const newFile = {
-    id: fileIdCounter,
-    folder_id: folderId,
-    name: req.file.originalname,
-    size: req.file.size,
-    mime_type: req.file.mimetype || 'application/octet-stream',
-    file_ext: path.extname(req.file.originalname).slice(1),
-    created_at: new Date().toISOString(),
-    icon_type: 'file',
-  };
-  DEMO_FILES.push(newFile);
-  res.json({ id: newFile.id, name: newFile.name });
+  const folderId = req.body.folder_id;
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    const result = await tg.uploadFile(client, folderId, req.file.path, req.file.originalname);
+    
+    // Cleanup temporary file after successful upload
+    fs.unlinkSync(req.file.path);
+    res.json(result);
+  } catch (e) {
+    // Cleanup temporary file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/files/:id/download', checkAuth, async (req, res) => {
+  const messageId = req.params.id;
+  const folderId = req.query.folder_id;
+
+  try {
+    const client = await getClientForUser(req.user.id);
+    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+
+    await tg.downloadFile(client, folderId, messageId, req, res);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(PORT, '0.0.0.0', () => {

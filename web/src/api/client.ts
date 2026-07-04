@@ -1,4 +1,21 @@
+import { supabase } from './supabase';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+async function getAuthHeader() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
+
+let activeAccessToken: string | null = null;
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  activeAccessToken = session ? session.access_token : null;
+});
+
+supabase.auth.getSession().then(({ data: { session } }) => {
+  if (session) activeAccessToken = session.access_token;
+});
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -9,8 +26,13 @@ class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
+  const authHeader = await getAuthHeader();
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeader,
+      ...options.headers
+    },
     ...options,
   });
   if (!res.ok) {
@@ -25,16 +47,22 @@ export const api = {
   health: () => request<{ status: string; version: string }>('/api/health'),
 
   // Auth
-  connect: (apiId: number) =>
-    request<{ success: boolean }>('/api/auth/connect', {
+  registerInvite: (email: string, password: string, token: string) =>
+    request<{ success: boolean; message: string }>('/api/auth/register-invite', {
       method: 'POST',
-      body: JSON.stringify({ api_id: apiId }),
+      body: JSON.stringify({ email, password, token }),
     }),
 
-  requestCode: (phone: string, apiId: number) =>
+  connect: (apiId: number, apiHash?: string) =>
+    request<{ success: boolean }>('/api/auth/connect', {
+      method: 'POST',
+      body: JSON.stringify({ api_id: apiId, api_hash: apiHash }),
+    }),
+
+  requestCode: (phone: string, apiId: number, apiHash?: string) =>
     request<{ success: boolean; next_step?: string; error?: string }>('/api/auth/code', {
       method: 'POST',
-      body: JSON.stringify({ phone, api_id: apiId }),
+      body: JSON.stringify({ phone, api_id: apiId, api_hash: apiHash }),
     }),
 
   signIn: (code: string) =>
@@ -85,7 +113,14 @@ export const api = {
     const form = new FormData();
     form.append('file', file);
     if (folder_id != null) form.append('folder_id', String(folder_id));
-    const res = await fetch(`${API_BASE}/api/files/upload`, { method: 'POST', body: form });
+    const authHeader = await getAuthHeader();
+    const res = await fetch(`${API_BASE}/api/files/upload`, {
+      method: 'POST',
+      headers: {
+        ...authHeader
+      },
+      body: form
+    });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new ApiError(res.status, body.error || res.statusText);
@@ -117,7 +152,10 @@ export const api = {
     }),
 
   getDownloadUrl: (messageId: number, folder_id?: number | null): string => {
-    const q = folder_id != null ? `?folder_id=${folder_id}` : '';
-    return `${API_BASE}/api/files/${messageId}/download${q}`;
+    const q = new URLSearchParams();
+    if (folder_id != null) q.set('folder_id', String(folder_id));
+    if (activeAccessToken) q.set('token', activeAccessToken);
+    const queryString = q.toString() ? `?${q.toString()}` : '';
+    return `${API_BASE}/api/files/${messageId}/download${queryString}`;
   },
 };

@@ -39,7 +39,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     useEffect(() => {
         const initStore = async () => {
             try {
-                const _store = await load('config');
+                const _store = await load('config.json');
                 const checkId = await _store.get<string>('api_id');
                 setStore(_store);
 
