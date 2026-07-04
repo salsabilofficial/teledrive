@@ -1053,10 +1053,10 @@ export function useAdaptiveStreaming(
             beginMoovDiscovery();
         };
 
-        // ── Global safety net: if nothing works after 45s, fall back to native <video> ──
+        // ── Global safety net: if nothing works after 15s, fall back to native <video> ──
         const safetyTimer = setTimeout(() => {
             if (onReadyCalledRef.current) return;
-            console.error('[AdaptiveStreaming] ⏰ Global safety timer fired — no successful MSE init after 45s, falling back to native video');
+            console.error('[AdaptiveStreaming] ⏰ Global safety timer fired — no successful MSE init after 15s, falling back to native video');
             if (playerPhaseRef.current !== 'error') {
                 playerPhaseRef.current = 'error';
                 setState(s => ({ ...s, phase: 'error', error: 'MSE initialization timed out' }));
@@ -1064,7 +1064,7 @@ export function useAdaptiveStreaming(
             abortFetch();
             abortDiscovery();
             setDynamicFallback(true);
-        }, 10000);
+        }, 15000);
 
         function beginMoovDiscovery() {
             const ctrl = new AbortController();
