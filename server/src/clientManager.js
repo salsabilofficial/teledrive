@@ -7,6 +7,8 @@ import { decrypt } from './crypto.js';
 export const activeClients = new Map(); // userId -> { client, lastActive }
 export const pendingLogins = new Map(); // userId -> { client, apiId, apiHash, phone, phoneCodeHash }
 
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity = disconnect
+
 /**
  * Retrieve or dynamically initialize the TelegramClient for a given user.
  * @param {string} userId - The Supabase user UUID.
@@ -57,6 +59,7 @@ export async function getClientForUser(userId) {
       lastActive: Date.now()
     });
 
+    console.log(`[ClientManager] ✅ Connected new client for user ${userId.slice(0, 8)}... (${activeClients.size} total active)`);
     return client;
   } catch (e) {
     console.error(`[ClientManager] Error connecting client for user ${userId}:`, e);
@@ -80,3 +83,37 @@ export async function removeClient(userId) {
   }
   pendingLogins.delete(userId);
 }
+
+/**
+ * Returns basic stats about the current state of active connections.
+ * Safe to expose publicly — contains no sensitive data.
+ */
+export function getStats() {
+  return {
+    activeConnections: activeClients.size,
+    pendingLogins: pendingLogins.size,
+  };
+}
+
+// ===== IDLE CLIENT CLEANUP =====
+// Run every 10 minutes. Disconnects any client that has been idle for > 30 minutes.
+// This prevents RAM from filling up with stale connections on a long-running server.
+const CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
+
+setInterval(async () => {
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const [userId, entry] of activeClients.entries()) {
+    const idleMs = now - entry.lastActive;
+    if (idleMs > IDLE_TIMEOUT_MS) {
+      console.log(`[ClientManager] 🧹 Removing idle client for user ${userId.slice(0, 8)}... (idle ${Math.round(idleMs / 60000)}m)`);
+      await removeClient(userId);
+      cleaned++;
+    }
+  }
+
+  if (cleaned > 0) {
+    console.log(`[ClientManager] Cleanup done. Removed ${cleaned} idle client(s). Active: ${activeClients.size}`);
+  }
+}, CLEANUP_INTERVAL_MS);

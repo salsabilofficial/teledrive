@@ -4,6 +4,10 @@ dist/
 .DS_Store
 .env
 
+# Server specific
+server/uploads/
+server/data.json
+
 # Rust
 /app/src-tauri/target/
 /app/src-tauri/gen/

@@ -331,6 +331,30 @@ export async function uploadFile(client, folderId, filePath, fileName) {
   };
 }
 
+/**
+ * Upload a file directly from a Buffer (no disk I/O).
+ */
+export async function uploadFileFromBuffer(client, folderId, buffer, fileName, mimeType) {
+  const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
+  const entity = await client.getInputEntity(targetId);
+
+  const message = await client.sendFile(entity, {
+    file: buffer,
+    forceDocument: true,
+    workers: 4,
+    attributes: [
+      new Api.DocumentAttributeFilename({
+        fileName: fileName
+      })
+    ]
+  });
+
+  return {
+    id: message.id,
+    name: fileName
+  };
+}
+
 export async function downloadFile(client, folderId, messageId, req, res) {
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
@@ -367,15 +391,32 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     res.setHeader('Content-Length', chunksize.toString());
 
     try {
+      // Telegram requires requestSize to be a multiple of 1MB (1048576)
+      const REQUEST_SIZE = 1024 * 1024; // 1MB chunks
+      // Align start offset to 1MB boundary for iterDownload
+      const alignedStart = Math.floor(start / REQUEST_SIZE) * REQUEST_SIZE;
+      const skipBytes = start - alignedStart;
+
       const fileStream = client.iterDownload({
         file: message.media,
-        offset: bigInt(start),
-        limit: chunksize,
-        requestSize: 512 * 1024
+        offset: bigInt(alignedStart),
+        limit: chunksize + skipBytes,
+        requestSize: REQUEST_SIZE
       });
 
+      let skipped = 0;
       for await (const chunk of fileStream) {
-        res.write(chunk);
+        if (skipped < skipBytes) {
+          const remaining = skipBytes - skipped;
+          if (chunk.length <= remaining) {
+            skipped += chunk.length;
+            continue;
+          }
+          res.write(chunk.slice(remaining));
+          skipped = skipBytes;
+        } else {
+          res.write(chunk);
+        }
       }
       res.end();
     } catch (streamError) {
@@ -390,7 +431,7 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     try {
       const fileStream = client.iterDownload({
         file: message.media,
-        requestSize: 512 * 1024
+        requestSize: 1024 * 1024 // 1MB chunks
       });
 
       for await (const chunk of fileStream) {

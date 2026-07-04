@@ -1,20 +1,52 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
+import busboy from 'busboy';
+import { rateLimit } from 'express-rate-limit';
 import * as tg from './telegram.js';
 import { supabase } from './supabase.js';
-import { getClientForUser } from './clientManager.js';
-import fs from 'fs';
+import { getClientForUser, getStats } from './clientManager.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000');
-const upload = multer({ dest: 'uploads/' });
+
+// ===== CORS WHITELIST =====
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:4173'];
 
 app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. curl, mobile apps) or whitelisted origins
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: Origin ${origin} is not allowed`));
+    }
+  },
+  credentials: true,
   exposedHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges']
 }));
 app.use(express.json());
+
+// ===== RATE LIMITING =====
+const limiter = rateLimit({
+  windowMs: 60 * 1000,        // 1 minute window
+  max: 120,                   // Max 120 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' }
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,        // 1 minute window
+  max: 10,                    // Max 10 uploads per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many uploads, please wait a moment.' }
+});
+
+app.use('/api/', limiter);
 
 // JWT Authentication middleware using Supabase
 async function checkAuth(req, res, next) {
@@ -45,7 +77,14 @@ async function checkAuth(req, res, next) {
 // ===== AUTH ROUTES =====
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', version: '1.0.0' });
+  const stats = getStats();
+  res.json({
+    status: 'ok',
+    version: '1.0.0',
+    uptime: Math.floor(process.uptime()),
+    activeConnections: stats.activeConnections,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.post('/api/auth/register-invite', async (req, res) => {
@@ -299,27 +338,63 @@ app.patch('/api/files/:id', checkAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/files/upload', checkAuth, upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+app.post('/api/files/upload', checkAuth, uploadLimiter, async (req, res) => {
+  const folderId = req.query.folder_id || '';
 
-  const folderId = req.body.folder_id;
+  const client = await getClientForUser(req.user.id).catch(() => null);
+  if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-  try {
-    const client = await getClientForUser(req.user.id);
-    if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
+  let fileBuffer = [];
+  let fileName = 'upload';
+  let mimeType = 'application/octet-stream';
+  let totalBytes = 0;
+  const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB hard limit
 
-    const result = await tg.uploadFile(client, folderId, req.file.path, req.file.originalname);
-    
-    // Cleanup temporary file after successful upload
-    fs.unlinkSync(req.file.path);
-    res.json(result);
-  } catch (e) {
-    // Cleanup temporary file
-    if (fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+  const bb = busboy({ headers: req.headers, limits: { fileSize: MAX_SIZE } });
+
+  bb.on('field', (name, value) => {
+    if (name === 'folder_id') folderId = value;
+  });
+
+  bb.on('file', (_fieldname, fileStream, info) => {
+    fileName = info.filename || 'upload';
+    mimeType = info.mimeType || 'application/octet-stream';
+
+    fileStream.on('data', (chunk) => {
+      fileBuffer.push(chunk);
+      totalBytes += chunk.length;
+    });
+
+    fileStream.on('limit', () => {
+      res.status(413).json({ error: 'File exceeds 2GB limit' });
+      bb.destroy();
+    });
+  });
+
+  bb.on('finish', async () => {
+    if (res.headersSent) return;
+    try {
+      const buffer = Buffer.concat(fileBuffer);
+      const result = await tg.uploadFileFromBuffer(client, folderId, buffer, fileName, mimeType);
+      res.json(result);
+    } catch (e) {
+      console.error('Upload error:', e);
+      if (!res.headersSent) {
+        res.status(500).json({ error: e.message });
+      }
+    } finally {
+      fileBuffer = [];
     }
-    res.status(500).json({ error: e.message });
-  }
+  });
+
+  bb.on('error', (err) => {
+    console.error('Busboy error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Upload failed' });
+    }
+  });
+
+  req.pipe(bb);
 });
 
 app.get('/api/files/:id/download', checkAuth, async (req, res) => {

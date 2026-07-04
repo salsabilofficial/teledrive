@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-async function getAuthHeader() {
+async function getAuthHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   return session ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
@@ -112,9 +112,11 @@ export const api = {
   uploadFile: async (file: File, folder_id?: number | null): Promise<{ id: number; name: string }> => {
     const form = new FormData();
     form.append('file', file);
-    if (folder_id != null) form.append('folder_id', String(folder_id));
+    // Pass folder_id as query param since busboy reads body as a raw stream
+    const q = new URLSearchParams();
+    if (folder_id != null) q.set('folder_id', String(folder_id));
     const authHeader = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/api/files/upload`, {
+    const res = await fetch(`${API_BASE}/api/files/upload?${q}`, {
       method: 'POST',
       headers: {
         ...authHeader
