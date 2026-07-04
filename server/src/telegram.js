@@ -412,7 +412,8 @@ export async function downloadFile(client, folderId, messageId, req, res) {
   const fileSize = Number(doc.size);
 
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  const safeFilename = encodeURIComponent(fileName);
+  res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
   res.setHeader('Accept-Ranges', 'bytes');
 
   const range = req.headers.range;
