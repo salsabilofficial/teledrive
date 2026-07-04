@@ -1,5 +1,6 @@
 import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
+import { CustomFile } from 'telegram/client/uploads/index.js';
 import { pendingLogins, activeClients, removeClient } from './clientManager.js';
 import { encrypt } from './crypto.js';
 import { supabase } from './supabase.js';
@@ -358,8 +359,10 @@ export async function uploadFileFromBuffer(client, folderId, buffer, fileName, m
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
 
+  const fileToUpload = new CustomFile(fileName, buffer.length, "", buffer);
+
   const message = await client.sendFile(entity, {
-    file: buffer,
+    file: fileToUpload,
     forceDocument: true,
     workers: 4,
     attributes: [
