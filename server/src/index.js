@@ -17,8 +17,8 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. curl, mobile apps) or whitelisted origins
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    // Allow requests with no origin (e.g. curl, mobile apps) or whitelisted origins (including wildcard *)
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
       callback(null, true);
     } else {
       callback(new Error(`CORS: Origin ${origin} is not allowed`));
