@@ -426,11 +426,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                             )}
                                             {qrUrl && (
                                                 <>
-                                                    <a
-                                                        href={qrUrl}
-                                                        className="p-4 bg-white rounded-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform block cursor-pointer"
-                                                        title="Tap to open Telegram directly"
-                                                    >
+                                                    <div className="p-4 bg-white rounded-2xl shadow-xl">
                                                         <QRCodeSVG
                                                             value={qrUrl}
                                                             size={200}
@@ -438,18 +434,19 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                                             bgColor="#ffffff"
                                                             fgColor="#000000"
                                                         />
-                                                    </a>
-                                                    <div className="text-center space-y-1">
-                                                        {isMobile ? (
-                                                            <p className="text-sm text-blue-300 font-bold animate-pulse">
-                                                                Tap the QR code to log in via Telegram app
-                                                            </p>
-                                                        ) : (
-                                                            <>
-                                                                <p className="text-sm text-white/80">Scan with your Telegram app</p>
-                                                                <p className="text-xs text-white/40">Settings &gt; Devices &gt; Link Desktop Device</p>
-                                                            </>
-                                                        )}
+                                                    </div>
+                                                    <div className="text-center space-y-2 w-full px-2">
+                                                        <p className="text-sm text-white/80">Pindai dengan aplikasi Telegram Anda</p>
+                                                        <p className="text-xs text-white/40">Pengaturan &gt; Perangkat &gt; Hubungkan Perangkat</p>
+                                                        
+                                                        <div className="pt-3 border-t border-white/5 mt-3">
+                                                            <a
+                                                                href={qrUrl}
+                                                                className="inline-flex items-center justify-center gap-1.5 w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-bold py-2.5 px-4 rounded-xl border border-blue-500/20 transition-all active:scale-[0.98]"
+                                                            >
+                                                                Hubungkan Langsung via Telegram
+                                                            </a>
+                                                        </div>
                                                     </div>
                                                     {qrPolling && (
                                                         <div className="flex items-center gap-2 text-xs text-blue-300">
