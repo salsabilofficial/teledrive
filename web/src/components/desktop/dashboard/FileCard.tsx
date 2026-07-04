@@ -7,6 +7,7 @@ import { FileTypeIcon } from '../../shared/FileTypeIcon';
 import { useVideoMetadata } from '../../../hooks/useVideoMetadata';
 import { useCachedVariants } from '../../../hooks/useCachedVariants';
 import { VideoMetaBadge } from '../../shared/VideoMetaBadge';
+import { api } from '../../../api/client';
 
 interface FileCardProps {
     file: TelegramFile;
@@ -52,9 +53,16 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
     const cachedQualities = (cachedVariants || []).filter(v => v.available).map(v => v.quality);
 
     useEffect(() => {
-        if (isFolder || !isImageFile(file.name)) return;
-        setThumbnail(null);
-        setThumbnailLoading(false);
+        if (isFolder) return;
+        if (isImageFile(file.name)) {
+            setThumbnailLoading(true);
+            const url = api.getDownloadUrl(file.id, file.folder_id ?? null);
+            setThumbnail(url);
+            setThumbnailLoading(false);
+        } else {
+            setThumbnail(null);
+            setThumbnailLoading(false);
+        }
     }, [file.id, file.name, activeFolderId, isFolder]);
 
     return (
