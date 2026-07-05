@@ -6,6 +6,8 @@ import { load } from '@tauri-apps/plugin-store';
 import { useTheme } from '../../context/ThemeContext';
 import { open } from '@tauri-apps/plugin-shell';
 import { QRCodeSVG } from 'qrcode.react';
+import { api } from '../../api/client';
+import { toast } from 'sonner';
 
 type Step = "setup" | "phone" | "code" | "password";
 
@@ -108,6 +110,19 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                     setApiId(savedId);
                     setApiHash(savedHash);
                     setStep("phone");
+                } else {
+                    // Attempt to fetch from cloud if missing
+                    try {
+                        const creds = await api.getTelegramCredentials();
+                        if (creds && creds.api_id) {
+                            setApiId(String(creds.api_id));
+                            setApiHash(creds.api_hash);
+                            toast.success("Berhasil mengambil data API dari Cloud!");
+                            // Don't auto-skip to phone yet, let the user see it was filled, or they can click Configure
+                        }
+                    } catch (e) {
+                        // Silent fail, user just types manually
+                    }
                 }
             } catch {
                 // config not found, starting fresh
