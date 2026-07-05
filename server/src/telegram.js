@@ -360,7 +360,11 @@ export async function listFiles(client, folderId, search = '', offsetId = 0) {
         let fileSize = 0;
         if (photo.sizes && photo.sizes.length > 0) {
           const largest = photo.sizes[photo.sizes.length - 1];
-          fileSize = largest.size || 0;
+          if (largest.size) {
+            fileSize = largest.size;
+          } else if (largest.sizes && largest.sizes.length > 0) {
+            fileSize = Math.max(...largest.sizes);
+          }
         }
 
         files.push({
@@ -510,7 +514,11 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     const photo = message.media.photo;
     if (photo.sizes && photo.sizes.length > 0) {
       const largest = photo.sizes[photo.sizes.length - 1];
-      fileSize = largest.size || 0;
+      if (largest.size) {
+        fileSize = largest.size;
+      } else if (largest.sizes && largest.sizes.length > 0) {
+        fileSize = Math.max(...largest.sizes);
+      }
     }
   }
 
