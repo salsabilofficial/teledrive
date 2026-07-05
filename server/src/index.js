@@ -83,7 +83,7 @@ app.get('/api/health', (req, res) => {
   const stats = getStats();
   res.json({
     status: 'ok',
-    version: '1.0.0',
+    version: '1.0.1',
     uptime: Math.floor(process.uptime()),
     activeConnections: stats.activeConnections,
     timestamp: new Date().toISOString()
