@@ -392,8 +392,26 @@ export async function downloadFile(client, folderId, messageId, req, res) {
 
   if (req.query.thumbnail === 'true') {
     try {
+      let thumbToDownload = 0;
+      const doc = message.media.document;
+      if (doc && doc.thumbs && doc.thumbs.length > 0) {
+        const mThumb = doc.thumbs.find(t => t.type === 'm');
+        const xThumb = doc.thumbs.find(t => t.type === 'x');
+        const iThumb = doc.thumbs.find(t => t.type === 'i');
+        
+        if (mThumb) {
+          thumbToDownload = mThumb;
+        } else if (xThumb) {
+          thumbToDownload = xThumb;
+        } else if (iThumb) {
+          thumbToDownload = iThumb;
+        } else if (doc.thumbs.length > 1) {
+          thumbToDownload = doc.thumbs[doc.thumbs.length - 1];
+        }
+      }
+
       const thumbnailBuffer = await client.downloadMedia(message.media, {
-        thumb: 0,
+        thumb: thumbToDownload,
       });
       if (thumbnailBuffer && thumbnailBuffer.length > 0) {
         res.setHeader('Content-Type', 'image/jpeg');
@@ -412,6 +430,7 @@ export async function downloadFile(client, folderId, messageId, req, res) {
   const fileSize = Number(doc.size);
 
   res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
   const safeFilename = encodeURIComponent(fileName);
   res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
   res.setHeader('Accept-Ranges', 'bytes');

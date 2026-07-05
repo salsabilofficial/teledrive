@@ -116,6 +116,10 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
             pendingPrefetch.add(key);
             const downloadUrl = api.getDownloadUrl(candidate.id, activeFolderId);
             if (downloadUrl) {
+                // Actually prefetch the image bytes into the browser cache
+                const img = new Image();
+                img.src = downloadUrl;
+                
                 rememberPreview(key, downloadUrl);
             }
             pendingPrefetch.delete(key);
