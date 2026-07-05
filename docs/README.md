@@ -17,10 +17,19 @@ Folder ini berisi dokumentasi teknis mengenai alur kerja (workflow) dan struktur
 
 ```mermaid
 graph TD
-    Browser[Web Client / Browser] <-->|API Request + JWT Token| Express[Express.js Server]
-    Desktop[Desktop App / Tauri] <-->|API Request + JWT Token| Express
-    Express <-->|Crypto module / AES-256-GCM| Crypt[Crypto Handler]
-    Express <-->|Admin Query| Supabase[(Supabase Database)]
-    Express <-->|Stateless / Connection Map| Manager[Client Manager]
-    Manager <-->|Direct Chunks / WSS| Telegram[Telegram API Server]
+    %% Web Architecture
+    Browser[Web Client / Browser] <-->|API Request + JWT| Express[Express.js Server]
+    Express <-->|Crypto / AES-256-GCM| Crypt[Crypto Handler]
+    Express <-->|Stateless / GramJS| Telegram[Telegram API Server]
+    Express <-->|Supabase Query| Supabase[(Supabase Database)]
+
+    %% Desktop Architecture
+    Desktop[Desktop App / Tauri] <-->|Fetch Auth Info Only| Express
+    Desktop <-->|Direct Local MTProto / Rust Grammers| Telegram
+    Desktop <-->|Local DB / Config| SQLite[(Local SQLite & JSON)]
 ```
+
+### Penjelasan Arsitektur Ganda (Dual Architecture)
+Aplikasi ini menggunakan dua pendekatan berbeda tergantung pada jenis klien yang digunakan:
+1. **Web Client (Browser):** Sepenuhnya bergantung pada server **Express.js (Node.js)** sebagai perantara (Proxy). Semua proses login, pengambilan file, *streaming*, dan *download* dilakukan oleh server Express.js menggunakan pustaka `GramJS`.
+2. **Desktop App (Tauri):** Merupakan aplikasi *standalone*. Server Express.js hanya digunakan di awal untuk sinkronisasi kredensial secara aman. Setelah itu, Desktop App menggunakan **Backend Rust bawaannya sendiri (menggunakan pustaka `grammers`)** untuk terhubung langsung ke Telegram API secara lokal. Streaming dan download di desktop **TIDAK** membebani server Node.js Anda.

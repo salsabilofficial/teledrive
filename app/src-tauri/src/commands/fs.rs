@@ -1438,17 +1438,35 @@ pub async fn cmd_get_files(
             let (name, size, mime, ext) = match doc {
                 Media::Document(d) => {
                     let doc_name = d.name().to_string();
-                    // Prefer the message caption (set by rename via EditMessage) over the
-                    // document's built-in filename attribute, so renames persist across refreshes.
                     let caption = msg.text();
-                    let display_name = if caption.is_empty() { doc_name.clone() } else { caption.to_string() };
                     let s = d.size();
                     let m = d.mime_type().map(|s| s.to_string());
-                    // Extension always from the original document name for correct file-type icon
-                    let e = std::path::Path::new(&doc_name).extension().map(|os| os.to_str().unwrap_or("").to_string());
+                    
+                    let mut e = std::path::Path::new(&doc_name).extension().map(|os| os.to_str().unwrap_or("").to_string());
+                    if e.is_none() || e.as_deref() == Some("") {
+                        if let Some(ref mime) = m {
+                            if mime.contains("video/mp4") { e = Some("mp4".to_string()); }
+                            else if mime.contains("image/jpeg") { e = Some("jpg".to_string()); }
+                            else if mime.contains("image/png") { e = Some("png".to_string()); }
+                            else if mime.contains("image/webp") { e = Some("webp".to_string()); }
+                            else if mime.contains("audio/ogg") { e = Some("ogg".to_string()); }
+                            else if mime.contains("audio/mpeg") || mime.contains("audio/mp3") { e = Some("mp3".to_string()); }
+                        }
+                    }
+
+                    let mut display_name = if caption.is_empty() { doc_name.clone() } else { caption.to_string() };
+                    if display_name.is_empty() || display_name == "Unknown" {
+                        display_name = format!("file_{}", msg.id());
+                        if let Some(ref ext) = e {
+                            if !ext.is_empty() {
+                                display_name = format!("{}.{}", display_name, ext);
+                            }
+                        }
+                    }
+                    
                     (display_name, s, m, e)
                 },
-                Media::Photo(_) => ("Photo.jpg".to_string(), 0, Some("image/jpeg".into()), Some("jpg".into())),
+                Media::Photo(_) => (format!("photo_{}.jpg", msg.id()), 0, Some("image/jpeg".into()), Some("jpg".into())),
                 _ => ("Unknown".to_string(), 0, None, None),
             };
             files.push(FileMetadata {
@@ -1471,11 +1489,28 @@ fn extract_search_files(msgs: &[tl::enums::Message]) -> Vec<FileMetadata> {
                         tl::enums::DocumentAttribute::Filename(f) => Some(f.file_name.clone()),
                         _ => None
                     }).unwrap_or("Unknown".to_string());
-                    // Prefer the message caption over the built-in document filename
-                    let name = if m.message.is_empty() { doc_name.clone() } else { m.message.clone() };
                     let size = doc.size as u64;
                     let mime = doc.mime_type.clone();
-                    let ext = std::path::Path::new(&doc_name).extension().map(|os| os.to_str().unwrap_or("").to_string());
+                    
+                    let mut ext = std::path::Path::new(&doc_name).extension().map(|os| os.to_str().unwrap_or("").to_string());
+                    if ext.is_none() || ext.as_deref() == Some("") {
+                        if mime.contains("video/mp4") { ext = Some("mp4".to_string()); }
+                        else if mime.contains("image/jpeg") { ext = Some("jpg".to_string()); }
+                        else if mime.contains("image/png") { ext = Some("png".to_string()); }
+                        else if mime.contains("image/webp") { ext = Some("webp".to_string()); }
+                        else if mime.contains("audio/ogg") { ext = Some("ogg".to_string()); }
+                        else if mime.contains("audio/mpeg") || mime.contains("audio/mp3") { ext = Some("mp3".to_string()); }
+                    }
+                    
+                    let mut name = if m.message.is_empty() { doc_name.clone() } else { m.message.clone() };
+                    if name == "Unknown" || name.is_empty() {
+                        name = format!("file_{}", m.id);
+                        if let Some(ref e) = ext {
+                            if !e.is_empty() {
+                                name = format!("{}.{}", name, e);
+                            }
+                        }
+                    }
                     let folder_id = match &m.peer_id {
                         tl::enums::Peer::Channel(c) => Some(c.channel_id),
                         tl::enums::Peer::User(u) => Some(u.user_id),

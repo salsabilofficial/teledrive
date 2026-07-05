@@ -68,6 +68,23 @@ Jika pengguna memilih menggunakan metode QR Code:
    * Backend memanggil fungsi penyelesaian `passwordResolve(password)` untuk meneruskan sandi ke GramJS.
    * GramJS menyelesaikan otentikasi di latar belakang. Jika berhasil, sesi disimpan ke Supabase dan pengguna dialihkan ke dashboard utama.
 
+### 2. Alur Interaksi Telegram API (Web vs Desktop)
+
+Penting untuk dipahami bahwa **Aplikasi Desktop dan Web memiliki alur kerja backend yang sangat berbeda** setelah proses login (otentikasi) selesai:
+
+### 2.1. Web Client (Express.js Proxy)
+Jika Anda menggunakan Web Browser, seluruh operasi Telegram dilakukan di server Node.js.
+- **Mengambil File:** Browser memanggil `GET /api/files` -> Node.js (GramJS) menghubungi Telegram -> meneruskan JSON ke browser.
+- **Streaming/Download:** Browser memanggil `GET /api/files/:id/download` -> Node.js melakukan *streaming* chunk (potongan data) dari Telegram API ke *response stream* browser secara terus-menerus.
+- **Beban Jaringan:** Beban *bandwidth* dan RAM ditanggung sepenuhnya oleh server Node.js Anda (misal: Hugging Face).
+
+### 2.2. Desktop Client (Standalone Rust)
+Jika Anda menggunakan Aplikasi Desktop Tauri, operasi Telegram dilakukan secara **mandiri/lokal** menggunakan pustaka Rust (`grammers`).
+- **Sinkronisasi Awal:** Desktop mengambil `API_ID` dan `API_HASH` dari Node.js secara transparan saat pertama kali login agar pengguna tidak perlu memasukkannya ulang.
+- **Mengambil File:** Desktop memanggil perintah lokal Tauri (`invoke('cmd_get_files')`) -> Kode Rust (*backend* internal aplikasi desktop) menghubungi Telegram langsung.
+- **Streaming/Download:** Desktop menggunakan *backend* Rust untuk mengambil chunk data dari Telegram secara langsung (tanpa melalui server Node.js) dan menayangkannya melalui *local server/streamer* Rust ke antarmuka React.
+- **Beban Jaringan:** Beban ditanggung sepenuhnya oleh komputer pengguna lokal dan server Telegram asli. Server Node.js Anda tidak dibebani sama sekali.
+
 ### 1.2. Sinkronisasi Kredensial (Khusus Desktop Tauri)
 
 Setelah login portal berhasil, khusus untuk integrasi App Desktop (Tauri), aplikasi akan mencoba membaca kredensial sesi dari berkas `config.json` lokal.

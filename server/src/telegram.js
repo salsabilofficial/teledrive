@@ -307,25 +307,73 @@ export async function listFiles(client, folderId, search = '', offsetId = 0) {
   const files = [];
 
   for (const msg of messages) {
-    if (msg.media && msg.media instanceof Api.MessageMediaDocument) {
-      const doc = msg.media.document;
-      const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
-      const originalName = fileAttr ? fileAttr.fileName : `file_${msg.id}`;
+    if (msg.media) {
+      if (msg.media instanceof Api.MessageMediaDocument) {
+        const doc = msg.media.document;
+        const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
+        
+        let finalName = `file_${msg.id}`;
+        let ext = '';
+        
+        if (fileAttr && fileAttr.fileName) {
+          finalName = fileAttr.fileName;
+          ext = finalName.includes('.') ? finalName.split('.').pop() : '';
+        } else {
+          // Fallback: Determine extension from mimeType
+          const mime = doc.mimeType || '';
+          if (mime.includes('video/mp4')) ext = 'mp4';
+          else if (mime.includes('image/jpeg')) ext = 'jpg';
+          else if (mime.includes('image/png')) ext = 'png';
+          else if (mime.includes('image/webp')) ext = 'webp';
+          else if (mime.includes('audio/ogg')) ext = 'ogg';
+          else if (mime.includes('audio/mpeg') || mime.includes('audio/mp3')) ext = 'mp3';
+          
+          if (ext) {
+            finalName = `${finalName}.${ext}`;
+          }
+        }
 
-      if (search && !originalName.toLowerCase().includes(search.toLowerCase())) {
-        continue;
+        if (search && !finalName.toLowerCase().includes(search.toLowerCase())) {
+          continue;
+        }
+
+        files.push({
+          id: msg.id,
+          folder_id: (targetId === 'me') ? null : Number(targetId),
+          name: finalName,
+          size: Number(doc.size),
+          mime_type: doc.mimeType,
+          file_ext: ext,
+          created_at: new Date(msg.date * 1000).toISOString(),
+          icon_type: 'file'
+        });
+      } else if (msg.media instanceof Api.MessageMediaPhoto) {
+        const photo = msg.media.photo;
+        if (!photo) continue;
+        
+        let finalName = `photo_${msg.id}.jpg`;
+        if (search && !finalName.toLowerCase().includes(search.toLowerCase())) {
+          continue;
+        }
+
+        // Find largest size for approximate file size
+        let fileSize = 0;
+        if (photo.sizes && photo.sizes.length > 0) {
+          const largest = photo.sizes[photo.sizes.length - 1];
+          fileSize = largest.size || 0;
+        }
+
+        files.push({
+          id: msg.id,
+          folder_id: (targetId === 'me') ? null : Number(targetId),
+          name: finalName,
+          size: Number(fileSize),
+          mime_type: 'image/jpeg',
+          file_ext: 'jpg',
+          created_at: new Date(msg.date * 1000).toISOString(),
+          icon_type: 'file'
+        });
       }
-
-      files.push({
-        id: msg.id,
-        folder_id: (targetId === 'me') ? null : Number(targetId),
-        name: originalName,
-        size: Number(doc.size),
-        mime_type: doc.mimeType,
-        file_ext: originalName.split('.').pop() || '',
-        created_at: new Date(msg.date * 1000).toISOString(),
-        icon_type: 'file'
-      });
     }
   }
 
@@ -433,12 +481,44 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     }
   }
 
-  const doc = message.media.document;
-  const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
-  const fileName = fileAttr ? fileAttr.fileName : `file_${messageId}`;
-  const fileSize = Number(doc.size);
+  let mediaToDownload = null;
+  let fileName = `file_${messageId}`;
+  let fileSize = 0;
+  let mimeType = 'application/octet-stream';
 
-  res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+  if (message.media instanceof Api.MessageMediaDocument) {
+    const doc = message.media.document;
+    mediaToDownload = doc;
+    fileSize = Number(doc.size);
+    mimeType = doc.mimeType;
+    const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
+    if (fileAttr && fileAttr.fileName) {
+        fileName = fileAttr.fileName;
+    } else {
+        const mime = doc.mimeType || '';
+        if (mime.includes('video/mp4')) fileName += '.mp4';
+        else if (mime.includes('image/jpeg')) fileName += '.jpg';
+        else if (mime.includes('image/png')) fileName += '.png';
+        else if (mime.includes('image/webp')) fileName += '.webp';
+        else if (mime.includes('audio/ogg')) fileName += '.ogg';
+        else if (mime.includes('audio/mpeg') || mime.includes('audio/mp3')) fileName += '.mp3';
+    }
+  } else if (message.media instanceof Api.MessageMediaPhoto) {
+    mediaToDownload = message.media.photo;
+    mimeType = 'image/jpeg';
+    fileName = `photo_${messageId}.jpg`;
+    const photo = message.media.photo;
+    if (photo.sizes && photo.sizes.length > 0) {
+      const largest = photo.sizes[photo.sizes.length - 1];
+      fileSize = largest.size || 0;
+    }
+  }
+
+  if (!mediaToDownload) {
+    throw new Error("Unsupported media type for download");
+  }
+
+  res.setHeader('Content-Type', mimeType || 'application/octet-stream');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   const safeFilename = encodeURIComponent(fileName);
   res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
