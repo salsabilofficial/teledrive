@@ -87,12 +87,28 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
         const initStore = async () => {
             try {
                 const store = await load('config.json');
-                const savedId = await store.get<string>('api_id');
-                const savedHash = await store.get<string>('api_hash');
+                let savedId = await store.get<string>('api_id');
+                let savedHash = await store.get<string>('api_hash');
+
+                if (
+                    savedId === "null" ||
+                    savedId === "undefined" ||
+                    (savedId && savedId.trim() === "")
+                ) {
+                    savedId = undefined;
+                }
+                if (
+                    savedHash === "null" ||
+                    savedHash === "undefined" ||
+                    (savedHash && savedHash.trim() === "")
+                ) {
+                    savedHash = undefined;
+                }
 
                 if (savedId && savedHash) {
                     setApiId(savedId);
                     setApiHash(savedHash);
+                    setStep("phone");
                 }
             } catch {
                 // config not found, starting fresh

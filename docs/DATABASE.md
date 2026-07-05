@@ -102,7 +102,13 @@ SUPABASE_SERVICE_ROLE_KEY=service_role_key_anda_disini
 ENCRYPTION_KEY=hex_key_32_bytes_acak_disini
 ```
 
-### Frontend Web (`web/.env`):
+### Web Client (`web/.env`):
+```env
+VITE_SUPABASE_URL=https://xxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=anon_public_key_anda_disini
+```
+
+### Desktop Client (`app/.env`):
 ```env
 VITE_SUPABASE_URL=https://xxxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=anon_public_key_anda_disini

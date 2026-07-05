@@ -12,7 +12,7 @@
     }
   },
   "productName": "TeleDrive",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "identifier": "com.teledrive.app",
   "build": {
     "beforeDevCommand": "npm run dev",

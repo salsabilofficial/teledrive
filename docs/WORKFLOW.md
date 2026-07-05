@@ -14,33 +14,33 @@ Proses autentikasi dibagi menjadi dua lapis:
 
 ```mermaid
 sequenceDiagram
-    participant Browser as Browser Client
+    participant Client as Client (Web / Desktop App)
     participant Supabase as Supabase Auth
     participant Server as Express Server
     participant Telegram as Telegram API
 
     %% Portal Login
-    Browser->>Supabase: Kirim Email + Password
-    Supabase-->>Browser: Kembalikan JWT Token Sesi
+    Client->>Supabase: Kirim Email + Password
+    Supabase-->>Client: Kembalikan JWT Token Sesi
     
     %% Status Check
-    Browser->>Server: HTTP GET /api/auth/status (Bearer JWT)
+    Client->>Server: HTTP GET /api/auth/status (Bearer JWT)
     Server->>Supabase: Verifikasi JWT Token
     Supabase-->>Server: User Valid (user_id)
     
     alt Sesi Telegram Belum Terhubung
-        Server-->>Browser: authenticated = false
-        Browser->>Browser: Tampilkan Wizard Link Telegram
-        Browser->>Server: POST /api/auth/code (Phone, API ID, API Hash)
+        Server-->>Client: authenticated = false
+        Client->>Client: Tampilkan Wizard Link Telegram
+        Client->>Server: POST /api/auth/code (Phone, API ID, API Hash)
         Server->>Telegram: Minta OTP Kode (sendCode)
-        Telegram-->>Browser: Kirim OTP SMS/Chat
-        Browser->>Server: POST /api/auth/sign-in (OTP Code)
+        Telegram-->>Client: Kirim OTP SMS/Chat
+        Client->>Server: POST /api/auth/sign-in (OTP Code)
         Server->>Telegram: Verifikasi Kode (SignIn)
         Server->>Server: Simpan & Enkripsi Sesi Telegram ke DB
-        Server-->>Browser: success = true, next_step = dashboard
+        Server-->>Client: success = true, next_step = dashboard
     else Sesi Telegram Sudah Terhubung
-        Server-->>Browser: authenticated = true
-        Browser->>Browser: Tampilkan Dashboard Utama
+        Server-->>Client: authenticated = true
+        Client->>Client: Tampilkan Dashboard Utama
     end
 ```
 
@@ -49,24 +49,31 @@ sequenceDiagram
 Jika pengguna memilih menggunakan metode QR Code:
 
 1. **Memulai Otorisasi (`/api/auth/qr/start`):**
-   * Browser mengirim request berisi API ID & API Hash ke server backend.
+   * Client (Browser / App Desktop) mengirim request berisi API ID & API Hash ke server backend.
    * Server menginisialisasi `TelegramClient` baru, menghubungkannya, dan menjalankan fungsi `client.signInUserWithQrCode()` di latar belakang (background task).
    * Callback `qrCode` di backend menerima token mentah dari Telegram, mengubahnya menjadi tautan standar `tg://login?token=<token_base64>`, lalu menyimpannya di memori sesi sementara (`pendingLogins`).
-   * Server membalas ke peramban dengan URL QR tersebut. Peramban lalu menampilkannya sebagai gambar QR Code menggunakan SVG renderer.
+   * Server membalas ke Client dengan URL QR tersebut. Client lalu menampilkannya sebagai gambar QR Code menggunakan SVG renderer.
 
 2. **Polling Status (`/api/auth/qr/status`):**
-   * Peramban melakukan ping secara berkala setiap 3 detik ke backend untuk menanyakan status scan QR.
+   * Client melakukan ping secara berkala setiap 3 detik ke backend untuk menanyakan status scan QR.
    * **Skenario Tanpa 2FA:** Ketika pengguna menyetujui perangkat baru di HP mereka, background task sukses masuk. Sesi disimpan terenkripsi ke database Supabase, dan status polling mengembalikan `{ success: true, next_step: 'dashboard' }`.
    * **Skenario Dengan 2FA (Verifikasi Dua Langkah):**
      * Telegram meminta sandi cloud. Ini memicu callback `password` di backend.
      * Callback backend menunda (stall) eksekusi dengan `Promise` tertunda dan mengubah status sesi menjadi `password_needed`.
      * Request polling berikutnya mendeteksi status ini dan mengembalikan `{ success: false, next_step: 'password', hint: 'Petunjuk Sandi' }`.
-     * Peramban otomatis berpindah ke layar input kata sandi cloud 2FA.
+     * Client otomatis berpindah ke layar input kata sandi cloud 2FA.
 
 3. **Verifikasi Kata Sandi (`/api/auth/password`):**
    * Pengguna memasukkan sandi cloud dan mengirimkannya ke backend.
    * Backend memanggil fungsi penyelesaian `passwordResolve(password)` untuk meneruskan sandi ke GramJS.
    * GramJS menyelesaikan otentikasi di latar belakang. Jika berhasil, sesi disimpan ke Supabase dan pengguna dialihkan ke dashboard utama.
+
+### 1.2. Sinkronisasi Kredensial (Khusus Desktop Tauri)
+
+Setelah login portal berhasil, khusus untuk integrasi App Desktop (Tauri), aplikasi akan mencoba membaca kredensial sesi dari berkas `config.json` lokal.
+- Jika data tidak valid, kosong, atau tersangkut di state `null` / `undefined`, aplikasi otomatis menghapus berkas tersebut.
+- Aplikasi kemudian melakukan *fetch* secara transparan ke endpoint `/api/auth/telegram-credentials` milik backend.
+- Jika backend sudah memiliki data terenkripsi (dari sesi sebelumnya), backend mengembalikannya dan aplikasi desktop langsung menyimpan ulang ke `config.json` yang baru, mencegah masalah konfigurasi kosong. (Catatan: Untuk versi web, proses ini tidak menggunakan tauri-store dan diatasi langsung lewat session backend/browser lokal).
 
 ---
 

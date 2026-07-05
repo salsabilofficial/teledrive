@@ -8,12 +8,12 @@ import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { UpdateBanner } from "./components/shared/UpdateBanner";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { usePlatform } from "./hooks/usePlatform";
+import { PortalAuth } from "./components/shared/PortalAuth";
+import { supabase } from "./api/supabase";
+import { api } from "./api/client";
 import "./App.css";
 
 const DesktopDashboard = React.lazy(() => import("./components/desktop/DesktopDashboard").then(m => ({ default: m.Dashboard })));
-// Vite requires a fully static import path for dynamic imports so it can
-// perform static analysis and code-splitting. Template literals with
-// variables prevent Vite from resolving the module at build time.
 const MobileDashboard = React.lazy(() => import("./components/mobile/MobileDashboard.tsx"));
 
 import { Toaster, toast } from "sonner";
@@ -25,7 +25,7 @@ import { useTranslation } from "react-i18next";
 
 const queryClient = new QueryClient();
 
-type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "ad-gateway";
+type AuthStatus = "loading" | "portal_unauthenticated" | "unauthenticated" | "authenticated" | "ad-gateway";
 
 function AppContent() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
@@ -68,58 +68,126 @@ function AppContent() {
     }
   }, [settings.performanceMode, isLoaded]);
 
-  // On mount: check for a saved session and auto-restore it.
-  // This is the SINGLE source of truth for the initial connection.
-  // useTelegramConnection (inside Dashboard) no longer calls cmd_connect on mount.
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const store = await load("config.json");
-        const savedId = await store.get<string>("api_id");
+  const checkSession = async () => {
+    try {
+      // 1. Check Supabase session first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setAuthStatus("portal_unauthenticated");
+        return;
+      }
 
-        if (!savedId) {
-          setAuthStatus("unauthenticated");
-          return;
-        }
+      const store = await load("config.json");
+      let savedId = await store.get<string>("api_id");
+      let savedHash = await store.get<string>("api_hash");
 
-        const apiId = parseInt(savedId, 10);
-        if (isNaN(apiId)) {
-          setAuthStatus("unauthenticated");
-          return;
-        }
-
-        // Initialize the client with the saved API ID
-        await invoke("cmd_connect", { apiId });
-
-        // Verify the session is still valid with Telegram servers
-        const ok = await invoke<boolean>("cmd_check_connection");
-        if (ok) {
-          // Check if user already passed the ad gateway — skip it if so
-          const gatewayPassed = await store.get<boolean>("ad_gateway_passed");
-          if (gatewayPassed) {
-            setAuthStatus("authenticated");
-          } else {
-            setAuthStatus("ad-gateway");
-          }
-        } else {
-          setAuthStatus("unauthenticated");
-        }
-      } catch (err) {
-        console.warn("Session restore failed, showing login:", err);
-        // Session file is corrupt or revoked — clean up and show login
+      // Clean up corrupt or invalid string representations in local storage
+      if (
+        !savedId ||
+        savedId === "null" ||
+        savedId === "undefined" ||
+        savedId.trim() === "" ||
+        !savedHash ||
+        savedHash === "null" ||
+        savedHash === "undefined" ||
+        savedHash.trim() === ""
+      ) {
+        savedId = undefined;
         try {
-          const store = await load("config.json");
           await store.delete("api_id");
+          await store.delete("api_hash");
           await store.save();
-        } catch {
-          // best-effort cleanup
+        } catch {}
+      }
+
+      // 2. If no local api_id, fetch from remote backend
+      if (!savedId) {
+        try {
+          const creds = await api.getTelegramCredentials();
+          if (creds && creds.api_id) {
+            await store.set("api_id", String(creds.api_id));
+            await store.set("api_hash", creds.api_hash);
+            await store.save();
+            savedId = String(creds.api_id);
+          }
+        } catch (credsErr: any) {
+          console.warn("Failed to fetch Telegram credentials automatically:", credsErr);
+          toast.error("Gagal mendapatkan kredensial Telegram dari server: " + (credsErr.message || credsErr));
         }
+      }
+
+      if (!savedId) {
+        setAuthStatus("unauthenticated");
+        return;
+      }
+
+      const apiId = parseInt(savedId, 10);
+      if (isNaN(apiId)) {
+        setAuthStatus("unauthenticated");
+        return;
+      }
+
+      // Initialize the client with the saved API ID
+      await invoke("cmd_connect", { apiId });
+
+      // Verify the session is still valid with Telegram servers
+      const ok = await invoke<boolean>("cmd_check_connection");
+      if (ok) {
+        // Check if user already passed the ad gateway — skip it if so
+        const gatewayPassed = await store.get<boolean>("ad_gateway_passed");
+        if (gatewayPassed) {
+          setAuthStatus("authenticated");
+        } else {
+          setAuthStatus("ad-gateway");
+        }
+      } else {
         setAuthStatus("unauthenticated");
       }
-    };
+    } catch (err) {
+      console.warn("Session restore failed, showing login:", err);
+      // Session file is corrupt or revoked — clean up and show login
+      try {
+        const store = await load("config.json");
+        await store.delete("api_id");
+        await store.delete("api_hash");
+        await store.save();
+      } catch {
+        // best-effort cleanup
+      }
+      setAuthStatus("unauthenticated");
+    }
+  };
 
+  // On mount: check for a saved session and auto-restore it.
+  useEffect(() => {
     checkSession();
+
+    // Listen to Supabase auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      if (event === "SIGNED_IN" && session) {
+        checkSession();
+      } else if (event === "SIGNED_OUT") {
+        setAuthStatus("portal_unauthenticated");
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      const store = await load("config.json");
+      await store.delete("api_id");
+      await store.delete("api_hash");
+      await store.save();
+    } catch (e) {
+      console.error("Logout failed:", e);
+    }
+    setAuthStatus("portal_unauthenticated");
+  };
 
   // Show thank-you toast when user enters the app after clicking the ad
   useEffect(() => {
@@ -197,14 +265,17 @@ function AppContent() {
         }>
           {isMobile ? (
             <ErrorBoundary>
-              <MobileDashboard onLogout={() => setAuthStatus("unauthenticated")} />
+              <MobileDashboard onLogout={handleLogout} />
             </ErrorBoundary>
           ) : (
             <ErrorBoundary>
-              <DesktopDashboard onLogout={() => setAuthStatus("unauthenticated")} />
+              <DesktopDashboard onLogout={handleLogout} />
             </ErrorBoundary>
           )}
         </Suspense>
+      )}
+      {authStatus === "portal_unauthenticated" && (
+        <PortalAuth onAuthenticated={checkSession} />
       )}
       {authStatus === "unauthenticated" && (
         <AuthWizard onLogin={() => setAuthStatus("ad-gateway")} />
@@ -212,7 +283,6 @@ function AppContent() {
     </main>
   );
 }
-
 
 function App() {
   return (

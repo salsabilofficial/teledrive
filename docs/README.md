@@ -17,7 +17,8 @@ Folder ini berisi dokumentasi teknis mengenai alur kerja (workflow) dan struktur
 
 ```mermaid
 graph TD
-    Browser[Browser Client] <-->|API Request + JWT Token| Express[Express.js Server]
+    Browser[Web Client / Browser] <-->|API Request + JWT Token| Express[Express.js Server]
+    Desktop[Desktop App / Tauri] <-->|API Request + JWT Token| Express
     Express <-->|Crypto module / AES-256-GCM| Crypt[Crypto Handler]
     Express <-->|Admin Query| Supabase[(Supabase Database)]
     Express <-->|Stateless / Connection Map| Manager[Client Manager]
