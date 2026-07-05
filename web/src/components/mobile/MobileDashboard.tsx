@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff, LayoutGrid, List } from 'lucide-react';
+import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff, LayoutGrid, List, CheckSquare, FolderInput } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BottomNavBar, TabType } from './BottomNavBar';
@@ -35,6 +35,8 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   const { settings, updateSetting } = useSettings();
   const viewMode = settings.viewMode || 'list';
   const [searchTerm, setSearchTerm] = useState("");
+  const [actionMenuFile, setActionMenuFile] = useState<TelegramFile | null>(null);
+  const [showMovePicker, setShowMovePicker] = useState(false);
 
   const logoutHandler = useMemo(() => onLogout || (() => {}), [onLogout]);
 
@@ -248,6 +250,50 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
     });
   }, [folders, activeFolderId]);
 
+  const buildFileActions = useCallback((file: TelegramFile): ActionItem[] => {
+    const actions: ActionItem[] = [
+      {
+        label: 'Preview',
+        icon: <Eye className="w-4 h-4" />,
+        onClick: () => handlePreview(file),
+      },
+      {
+        label: 'Download',
+        icon: <Download className="w-4 h-4" />,
+        onClick: () => handleDownload(file),
+      },
+      {
+        label: 'Rename',
+        icon: <Pencil className="w-4 h-4" />,
+        onClick: () => handleRenameFile(file),
+      },
+    ];
+
+    actions.push({
+      label: 'Share Link',
+      icon: <Link className="w-4 h-4" />,
+      onClick: () => setShareFile(file),
+    });
+
+    const folder = folders.find(f => f.id === file.folder_id) || folders.find(f => f.id === activeFolderId);
+    const username = folder?.username || (folder as any)?.chat?.username || (folder as any)?.channel?.username;
+    if (username) {
+      actions.push({
+        label: 'Copy Telegram Link',
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => handleCopyTelegramLink(file),
+      });
+    }
+
+    actions.push({
+      label: 'Delete',
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: () => handleDeleteFile(file),
+      destructive: true,
+    });
+    return actions;
+  }, [folders, activeFolderId, handlePreview, handleDownload, handleRenameFile, handleCopyTelegramLink, handleDeleteFile]);
+
   const displayFiles = useMemo(() => {
     let files = allFiles;
     if (fileRenames.size > 0) {
@@ -413,6 +459,74 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                 </div>
               </div>
 
+            {/* Selection controls (Select, All, Clear) */}
+            {!isLoading && displayFiles.length > 0 && (
+              <div className="flex items-center gap-2 mt-2 mb-1">
+                <button
+                  onClick={() => {
+                    if (selectedIds.length > 0) {
+                      handleClearSelection();
+                    } else {
+                      handleToggleSelection(displayFiles[0].id);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 ${
+                    selectedIds.length > 0
+                      ? 'bg-telegram-primary/20 text-telegram-primary border border-telegram-primary/30'
+                      : 'bg-telegram-hover/20 text-telegram-subtext border border-telegram-border/30'
+                  }`}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  {selectedIds.length > 0 ? `${selectedIds.length} selected` : 'Select'}
+                </button>
+                {selectedIds.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleSelectAll}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold bg-telegram-hover/20 text-telegram-subtext border border-telegram-border/30 active:scale-95 transition-all duration-200"
+                    >
+                      <Check className="w-3 h-3" />
+                      All
+                    </button>
+                    <button
+                      onClick={handleClearSelection}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold bg-telegram-hover/20 text-telegram-subtext border border-telegram-border/30 active:scale-95 transition-all duration-200"
+                    >
+                      <X className="w-3 h-3" />
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Batch Action Bar - visible when items are selected */}
+            {selectedIds.length > 0 && (
+              <div className="sticky top-14 z-20 flex items-center justify-center gap-3 p-3 mt-2 mb-1 rounded-2xl bg-telegram-primary/10 border border-telegram-primary/20 backdrop-blur-md animate-in slide-in-from-top-2">
+                <button
+                  onClick={handleBulkDownload}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-telegram-primary/20 text-telegram-primary border border-telegram-primary/30 active:scale-95 transition-all duration-200"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download ({selectedIds.length})
+                </button>
+                <button
+                  onClick={() => setShowMovePicker(true)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 active:scale-95 transition-all duration-200"
+                >
+                  <FolderInput className="w-3.5 h-3.5" />
+                  Move ({selectedIds.length})
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 active:scale-95 transition-all duration-200"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete ({selectedIds.length})
+                </button>
+              </div>
+            )}
+
             {viewMode === 'grid' && !isLoading && displayFiles.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 pb-24">
                 {displayFiles.map((file) => {
@@ -423,6 +537,11 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                       file={file}
                       isSelected={isSelected}
                       onToggleSelection={() => handleToggleSelection(file.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setActionMenuFile(file);
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (selectedIds.length > 0) {
@@ -444,22 +563,10 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
               <TouchFileList
                 files={displayFiles}
                 isLoading={isLoading}
-                onDownload={handleDownload}
-                onDelete={handleDeleteFile}
                 onPreview={handlePreview}
-                onRename={handleRenameFile}
-                onShare={setShareFile}
-                onCopyTelegramLink={handleCopyTelegramLink}
-                onBulkShare={handleBulkShare}
                 selectedIds={selectedIds}
                 onToggleSelection={handleToggleSelection}
-                onSelectAll={handleSelectAll}
-                onClearSelection={handleClearSelection}
-                onBulkDelete={handleBulkDelete}
-                onBulkDownload={handleBulkDownload}
-                onBulkMove={handleBulkMove}
-                folders={folders}
-                activeFolderId={activeFolderId}
+                onShowActions={setActionMenuFile}
               />
             )}
           </div>
@@ -1088,6 +1195,59 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {actionMenuFile && (
+        <ActionPopover
+          title={actionMenuFile.name}
+          actions={buildFileActions(actionMenuFile)}
+          onClose={() => setActionMenuFile(null)}
+        />
+      )}
+
+      {showMovePicker && (
+        <div
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowMovePicker(false)}
+        >
+          <div
+            className="bg-[#1c1c1e] border border-white/10 rounded-2xl p-5 w-[300px] max-h-[60vh] flex flex-col shadow-2xl animate-in fade-in duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white">Move {selectedIds.length} file{selectedIds.length !== 1 ? 's' : ''} to...</h3>
+              <button
+                onClick={() => setShowMovePicker(false)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-telegram-subtext"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+              <button
+                onClick={() => { handleBulkMove(null); setShowMovePicker(false); }}
+                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  activeFolderId === null
+                    ? 'bg-telegram-primary/10 text-telegram-primary'
+                    : 'text-telegram-subtext hover:bg-white/5'
+                }`}
+              >
+                📁 Saved Messages
+              </button>
+              {folders
+                .filter(f => f.id !== activeFolderId)
+                .map(folder => (
+                  <button
+                    key={folder.id}
+                    onClick={() => { handleBulkMove(folder.id); setShowMovePicker(false); }}
+                    className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold text-telegram-subtext hover:bg-white/5 transition-all duration-200"
+                  >
+                    📁 {folder.name}
+                  </button>
+                ))}
+            </div>
           </div>
         </div>
       )}

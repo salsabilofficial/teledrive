@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { Folder, Eye, Trash2, Link, Check } from 'lucide-react';
+import { Folder, Eye, Trash2, Link, Check, MoreVertical } from 'lucide-react';
 import { TelegramFile } from '../../../types';
 import { createDragGhost } from '../../../utils';
 import { FileTypeIcon } from '../../shared/FileTypeIcon';
@@ -140,7 +140,7 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
                         e.stopPropagation();
                         if (onToggleSelection) onToggleSelection();
                     }}
-                    className={`absolute top-2 left-2 w-5 h-5 rounded-full border flex items-center justify-center transition-all z-10 cursor-pointer ${isSelected ? 'bg-telegram-primary border-telegram-primary' : 'border-white/50 bg-black/30 opacity-0 group-hover:opacity-100'}`}
+                    className={`absolute top-2 left-2 w-5 h-5 rounded-full border flex items-center justify-center transition-all z-10 cursor-pointer ${isSelected ? 'bg-telegram-primary border-telegram-primary' : 'border-white/50 bg-black/30 md:opacity-0 md:group-hover:opacity-100 opacity-100'}`}
                 >
                     {isSelected && <div className="w-1.5 h-1.5 bg-black rounded-full" />}
                 </div>
@@ -163,7 +163,8 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
                     </div>
                 </div>
 
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                {/* Desktop hover action buttons */}
+                <div className="absolute top-2 right-2 hidden md:group-hover:flex gap-1 z-10 transition-opacity">
                     <button onClick={(e) => { e.stopPropagation(); if (onPreview) onPreview() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-telegram-primary hover:text-white text-white/70" title="Preview">
                         <Eye className="w-3 h-3" />
                     </button>
@@ -177,6 +178,20 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
                     )}
                     <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-red-500 hover:text-white text-white/70" title="Delete">
                         <Trash2 className="w-3 h-3" />
+                    </button>
+                </div>
+
+                {/* Mobile action button (three-dots options menu) */}
+                <div className="absolute top-2 right-2 md:hidden z-10">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onContextMenu) onContextMenu(e as any);
+                        }}
+                        className="p-1.5 bg-black/60 active:scale-90 text-white rounded-full border border-white/10 shadow-lg"
+                        title="Options"
+                    >
+                        <MoreVertical className="w-3.5 h-3.5" />
                     </button>
                 </div>
             </motion.div>
