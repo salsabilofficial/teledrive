@@ -566,7 +566,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
               </div>
             )}
 
-            {viewMode === 'grid' && !isLoading && displayFiles.length > 0 ? (
+            {viewMode === 'grid' && !isLoading && displayFiles.length > 0 && (
               <div className="grid grid-cols-2 gap-3 pb-24">
                 {displayFiles.map((file) => {
                   const isSelected = selectedIds.includes(file.id);
