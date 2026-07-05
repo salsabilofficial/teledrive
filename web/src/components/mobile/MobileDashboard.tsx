@@ -978,16 +978,17 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
           }`}
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-4 flex items-center justify-between border-b border-telegram-border/30">
-          <div className="flex items-center gap-2">
-            <img src="/logo.svg" className="w-8 h-8 drop-shadow-lg" alt="Logo" />
-            <span className="font-bold text-base text-telegram-text tracking-tight">Telegram Drive</span>
+        <div className="px-5 py-4.5 flex items-center justify-between border-b border-telegram-border/30">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.svg" className="w-8.5 h-8.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)]" alt="Logo" />
+            <span className="font-extrabold text-base text-telegram-text tracking-tight">TeleDrive</span>
           </div>
           <button
             onClick={() => setIsSidebarOpen(false)}
-            className="p-1 rounded-lg bg-telegram-hover/30 hover:bg-telegram-hover/60 text-telegram-subtext text-xs"
+            className="p-1.5 rounded-xl hover:bg-telegram-hover/50 text-telegram-subtext active:scale-90 transition-all"
+            aria-label="Close sidebar"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -997,54 +998,54 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
               setActiveFolderId(null);
               setIsSidebarOpen(false);
             }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${activeFolderId === null
-                ? 'bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/15'
-                : 'text-telegram-subtext hover:bg-telegram-hover/40 hover:text-telegram-text border border-transparent'
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 active:scale-[0.99] ${activeFolderId === null
+                ? 'bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10'
+                : 'text-telegram-subtext hover:bg-telegram-hover/25 hover:text-telegram-text border border-transparent'
               }`}
           >
-            <span>Saved Messages</span>
+            <Folder className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate">Saved Messages</span>
           </button>
 
           {folders.map(folder => {
             const isPublic = folder.is_public || !!folder.username;
             return (
-            <div key={folder.id} className="flex items-center gap-1">
+            <div key={folder.id} className="flex items-center gap-1 group">
               <button
                 onClick={() => {
                   setActiveFolderId(folder.id);
                   setIsSidebarOpen(false);
                 }}
-                className={`flex-1 text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                className={`flex-1 flex items-center gap-3 text-left px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 active:scale-[0.99] ${
                   activeFolderId === folder.id
-                    ? 'bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/15'
-                    : 'text-telegram-subtext hover:bg-telegram-hover/40 hover:text-telegram-text border border-transparent'
+                    ? 'bg-telegram-primary/15 text-telegram-primary border border-telegram-primary/10'
+                    : 'text-telegram-subtext hover:bg-telegram-hover/25 hover:text-telegram-text border border-transparent'
                 }`}
               >
-                <span className="flex items-center gap-1.5 max-w-[150px]">
-                  <span className="truncate">{folder.name}</span>
-                  {isPublic ? (
-                    <Globe className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                  ) : (
-                    <Lock className="w-3 h-3 text-amber-400/60 flex-shrink-0" />
-                  )}
-                </span>
+                <Folder className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate flex-1 max-w-[140px]">{folder.name}</span>
+                {isPublic ? (
+                  <Globe className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                ) : (
+                  <Lock className="w-3.5 h-3.5 text-amber-400/60 flex-shrink-0" />
+                )}
               </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setFolderActionMenu(folder);
                 }}
-                className="flex-shrink-0 p-2 rounded-xl hover:bg-telegram-hover/40 active:bg-telegram-hover/60 text-telegram-subtext/60 hover:text-telegram-subtext transition-all duration-200"
+                className="flex-shrink-0 p-2.5 rounded-2xl hover:bg-telegram-hover/25 active:bg-telegram-hover/40 text-telegram-subtext/60 hover:text-telegram-subtext transition-all duration-200"
                 aria-label="Folder actions"
               >
-                <MoreVertical className="w-3.5 h-3.5" />
+                <MoreVertical className="w-4 h-4" />
               </button>
             </div>
             );
           })}
         </nav>
 
-        <div className="px-4 py-3 border-t border-telegram-border/30 space-y-3">
+        <div className="px-5 py-4 border-t border-telegram-border/30 space-y-4">
           <button
             onClick={async () => {
               const name = prompt("Enter folder name:");
@@ -1052,12 +1053,12 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                 await handleCreateFolder(name.trim());
               }
             }}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold text-telegram-subtext hover:text-telegram-text border border-dashed border-telegram-border/60 hover:bg-telegram-hover/20 transition-all duration-200"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-bold text-telegram-subtext hover:text-telegram-text border border-dashed border-telegram-border/60 hover:bg-telegram-hover/10 active:scale-[0.98] transition-all duration-200"
           >
             + Create Folder
           </button>
-          <div className="flex items-center gap-2 text-telegram-subtext text-[10px] font-semibold uppercase tracking-wider">
-            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+          <div className="flex items-center gap-2 px-1 text-telegram-subtext text-[10px] font-bold uppercase tracking-wider">
+            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
             <span>{isConnected ? 'Connected' : 'Offline'}</span>
           </div>
         </div>
