@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { TelegramFile, BandwidthStats } from '../../types';
@@ -76,18 +76,33 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [moveFileTarget, setMoveFileTarget] = useState<TelegramFile | null>(null);
     const [renameFileTarget, setRenameFileTarget] = useState<TelegramFile | null>(null);
 
-    const { data: allFiles = [], isLoading, error } = useQuery({
+    const {
+        data: filesPages,
+        isLoading,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage
+    } = useInfiniteQuery({
         queryKey: ['files', activeFolderId],
-        queryFn: async () => {
-            const result = await api.listFiles({ folder_id: activeFolderId });
-            return result.data.map((f: any) => ({
-                ...f,
-                sizeStr: formatBytes(f.size),
-                type: (f.icon_type as TelegramFile['type']) || 'file'
-            }));
+        queryFn: async ({ pageParam }) => {
+            const offsetId = pageParam || undefined;
+            const result = await api.listFiles({ folder_id: activeFolderId, offset_id: offsetId });
+            return {
+                ...result,
+                data: result.data.map((f: any) => ({
+                    ...f,
+                    sizeStr: formatBytes(f.size),
+                    type: (f.icon_type as TelegramFile['type']) || 'file'
+                }))
+            };
         },
+        initialPageParam: 0,
+        getNextPageParam: (lastPage) => lastPage.nextOffsetId ?? undefined,
         enabled: !!store,
     });
+
+    const allFiles = filesPages?.pages.flatMap(p => p.data) ?? [];
 
     const displayedFiles = searchTerm.length > 2
         ? searchResults
@@ -638,6 +653,9 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onFileMove={handleFileMove}
                     cardScale={cardScale}
                     onCardScaleChange={setCardScale}
+                    onLoadMore={fetchNextPage}
+                    hasMore={!!hasNextPage}
+                    loadingMore={isFetchingNextPage}
                 />
             </main>
 

@@ -288,24 +288,18 @@ app.patch('/api/folders/:id', checkAuth, async (req, res) => {
 app.get('/api/files', checkAuth, async (req, res) => {
   const folderId = req.query.folder_id;
   const search = req.query.search || '';
-  const page = parseInt(req.query.page || '1');
-  const limit = parseInt(req.query.limit || '20');
+  const offsetId = parseInt(req.query.offset_id || '0');
 
   try {
     const client = await getClientForUser(req.user.id);
     if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-    const files = await tg.listFiles(client, folderId, search);
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const paginatedFiles = files.slice(startIndex, startIndex + limit);
+    const result = await tg.listFiles(client, folderId, search, offsetId);
 
     res.json({
-      data: paginatedFiles,
-      page,
-      limit,
-      total: files.length
+      data: result.files,
+      nextOffsetId: result.nextOffsetId,
+      hasMore: result.hasMore
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -320,8 +314,8 @@ app.get('/api/files/search', checkAuth, async (req, res) => {
     const client = await getClientForUser(req.user.id);
     if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-    const results = await tg.listFiles(client, folderId, q);
-    res.json({ data: results });
+    const result = await tg.listFiles(client, folderId, q);
+    res.json({ data: result.files });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -335,7 +329,7 @@ app.get('/api/files/:id', checkAuth, async (req, res) => {
     const client = await getClientForUser(req.user.id);
     if (!client) return res.status(400).json({ error: 'Telegram account not connected' });
 
-    const files = await tg.listFiles(client, folderId);
+    const { files } = await tg.listFiles(client, folderId);
     const file = files.find(f => f.id === parseInt(messageId));
     if (!file) return res.status(404).json({ error: 'File not found' });
     res.json(file);

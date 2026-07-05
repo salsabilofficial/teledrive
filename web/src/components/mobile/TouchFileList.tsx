@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { MoreVertical } from 'lucide-react';
 import { FileTypeIcon } from '../shared/FileTypeIcon';
 import { TelegramFile } from '../../types';
@@ -10,6 +10,9 @@ interface TouchFileListProps {
   selectedIds: number[];
   onToggleSelection: (id: number) => void;
   onShowActions: (file: TelegramFile) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 
 export function TouchFileList({
@@ -18,9 +21,26 @@ export function TouchFileList({
   onPreview,
   selectedIds,
   onToggleSelection,
-  onShowActions
+  onShowActions,
+  hasMore,
+  onLoadMore,
+  loadingMore
 }: TouchFileListProps) {
   const isSelectionActive = selectedIds.length > 0;
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !onLoadMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore && !loadingMore) {
+        onLoadMore();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, onLoadMore]);
 
   // Long-press detection refs
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +179,15 @@ export function TouchFileList({
               </div>
             );
           })}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-4">
+              {loadingMore ? (
+                <div className="w-6 h-6 border-3 border-telegram-primary border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <span className="text-xs text-telegram-subtext/50">Load more...</span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </>

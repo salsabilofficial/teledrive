@@ -295,10 +295,15 @@ export async function renameFolder(client, folderId, newName) {
 
 // ===== FILES =====
 
-export async function listFiles(client, folderId, search = '') {
+export async function listFiles(client, folderId, search = '', offsetId = 0) {
+  const LIMIT = 200;
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
-  const messages = await client.getMessages(entity, { limit: 100 });
+
+  const params = { limit: LIMIT };
+  if (offsetId) params.offset_id = offsetId;
+
+  const messages = await client.getMessages(entity, params);
   const files = [];
 
   for (const msg of messages) {
@@ -323,7 +328,11 @@ export async function listFiles(client, folderId, search = '') {
       });
     }
   }
-  return files;
+
+  const lastMsg = messages[messages.length - 1];
+  const nextOffsetId = messages.length >= LIMIT ? lastMsg.id : null;
+
+  return { files, nextOffsetId, hasMore: nextOffsetId !== null };
 }
 
 export async function deleteFile(client, folderId, messageId) {

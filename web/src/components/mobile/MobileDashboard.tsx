@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff, LayoutGrid, List, CheckSquare, FolderInput } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BottomNavBar, TabType } from './BottomNavBar';
 import { TouchFileList } from './TouchFileList';
@@ -93,18 +93,32 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
     }
   }, [activeFolderId]);
 
-  const { data: allFiles = [], isLoading } = useQuery({
+  const {
+    data: filesPages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
     queryKey: ['files', activeFolderId],
-    queryFn: async () => {
-        const result = await api.listFiles({ folder_id: activeFolderId });
-        return result.data.map((f: any) => ({
-            ...f,
-            sizeStr: formatBytes(f.size),
-            type: (f.icon_type as any) || 'file'
-        }));
+    queryFn: async ({ pageParam }) => {
+        const offsetId = pageParam || undefined;
+        const result = await api.listFiles({ folder_id: activeFolderId, offset_id: offsetId });
+        return {
+            ...result,
+            data: result.data.map((f: any) => ({
+                ...f,
+                sizeStr: formatBytes(f.size),
+                type: (f.icon_type as any) || 'file'
+            }))
+        };
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextOffsetId ?? undefined,
     enabled: !!store,
   });
+
+  const allFiles = filesPages?.pages.flatMap(p => p.data) ?? [];
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [fileRenames, setFileRenames] = useState<Map<number, string>>(new Map());
@@ -584,11 +598,30 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
                   );
                 })}
               </div>
-            ) : (
+            )}
+            {hasNextPage && viewMode === 'grid' && (
+              <div className="flex justify-center py-4">
+                {isFetchingNextPage ? (
+                  <div className="w-6 h-6 border-3 border-telegram-primary border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <button
+                    onClick={() => fetchNextPage()}
+                    className="px-4 py-2 rounded-xl bg-telegram-hover/30 text-telegram-subtext text-xs font-semibold border border-telegram-border/30 active:scale-95"
+                  >
+                    Load more files
+                  </button>
+                )}
+              </div>
+            )}
+
+            {viewMode !== 'grid' && (
               <TouchFileList
                 files={displayFiles}
                 isLoading={isLoading}
                 onPreview={handlePreview}
+                hasMore={!!hasNextPage}
+                onLoadMore={fetchNextPage}
+                loadingMore={isFetchingNextPage}
                 selectedIds={selectedIds}
                 onToggleSelection={handleToggleSelection}
                 onShowActions={setActionMenuFile}

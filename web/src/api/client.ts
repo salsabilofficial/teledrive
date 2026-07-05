@@ -93,13 +93,12 @@ export const api = {
     request<{ authenticated: boolean }>('/api/auth/status'),
 
   // Files
-  listFiles: (params: { folder_id?: number | null; page?: number; limit?: number; search?: string }) => {
+  listFiles: (params: { folder_id?: number | null; offset_id?: number; search?: string }) => {
     const q = new URLSearchParams();
     if (params.folder_id != null) q.set('folder_id', String(params.folder_id));
-    if (params.page) q.set('page', String(params.page));
-    if (params.limit) q.set('limit', String(params.limit));
+    if (params.offset_id) q.set('offset_id', String(params.offset_id));
     if (params.search) q.set('search', params.search);
-    return request<{ data: any[]; page: number; limit: number }>(`/api/files?${q}`);
+    return request<{ data: any[]; nextOffsetId: number | null; hasMore: boolean }>(`/api/files?${q}`);
   },
 
   getFile: (id: number, folder_id?: number | null) => {

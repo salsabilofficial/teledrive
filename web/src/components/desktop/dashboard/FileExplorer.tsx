@@ -36,6 +36,9 @@ interface FileExplorerProps {
     folders?: TelegramFolder[];
     cardScale: number;
     onCardScaleChange: (scale: number) => void;
+    onLoadMore?: () => void;
+    hasMore?: boolean;
+    loadingMore?: boolean;
 }
 
 
@@ -155,6 +158,8 @@ export function FileExplorer({
         overscan: 5,
     });
 
+    const sentinelRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (parentRef.current) {
             parentRef.current.scrollTop = 0;
@@ -162,6 +167,18 @@ export function FileExplorer({
         gridVirtualizer.scrollToOffset(0);
         listVirtualizer.scrollToOffset(0);
     }, [activeFolderId, gridVirtualizer, listVirtualizer]);
+
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el || !onLoadMore) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && hasMore && !loadingMore) {
+                onLoadMore();
+            }
+        }, { root: parentRef.current, rootMargin: '200px' });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasMore, loadingMore, onLoadMore]);
 
     // Remeasure the grid virtualizer when columns or cardHeight changes to prevent overlapping
     useEffect(() => {
@@ -337,6 +354,15 @@ export function FileExplorer({
                             );
                         })}
                     </div>
+                    {hasMore && (
+                        <div ref={sentinelRef} className="flex justify-center py-4">
+                            {loadingMore ? (
+                                <div className="w-6 h-6 border-3 border-telegram-primary border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                                <span className="text-xs text-telegram-subtext/50">Scroll for more...</span>
+                            )}
+                        </div>
+                    )}
                 </>
             ) : (
                 <div className="flex flex-col w-full">
@@ -414,6 +440,15 @@ export function FileExplorer({
                             );
                         })}
                     </div>
+                    {hasMore && (
+                        <div ref={sentinelRef} className="flex justify-center py-4">
+                            {loadingMore ? (
+                                <div className="w-6 h-6 border-3 border-telegram-primary border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                                <span className="text-xs text-telegram-subtext/50">Scroll for more...</span>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
