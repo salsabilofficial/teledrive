@@ -1,7 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Folder, Download, Menu, LogOut, RefreshCw, UploadCloud, MoreVertical, Trash2, Pencil, Globe, Shield, Lock, ChevronDown, Share2, Link, Copy, Check, X, Loader2, Wifi, Activity, Zap, Eye, EyeOff } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { listen } from '@tauri-apps/api/event';
 import { useQuery } from '@tanstack/react-query';
@@ -25,7 +24,6 @@ import { PreviewModal } from '../desktop/dashboard/PreviewModal';
 import { useTheme } from '../../context/ThemeContext';
 import { TelegramFile, TelegramFolder, ShareInfo, BandwidthStats } from '../../types';
 import { useSettings } from '../../context/SettingsContext';
-import { version as appVersion } from '../../../package.json';
 import { LANGUAGES } from '../../i18n/languages';
 import { useTranslation } from 'react-i18next';
 
@@ -437,7 +435,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
         <div className="flex items-center gap-3">
           <img src="/logo.svg" className="w-8 h-8 drop-shadow-lg" alt="Logo" />
           <div>
-            <h1 className={`text-base font-bold tracking-tight ${theme === 'light' ? 'text-[#1c1c1e]' : 'bg-gradient-to-r from-white to-telegram-subtext bg-clip-text text-transparent'}`}>Telegram Drive</h1>
+            <h1 className={`text-base font-bold tracking-tight ${theme === 'light' ? 'text-[#1c1c1e]' : 'bg-gradient-to-r from-white to-telegram-subtext bg-clip-text text-transparent'}`}>TeleDrive</h1>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -799,44 +797,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
               </div>
             )}
 
-            <div className="p-4 rounded-2xl bg-telegram-hover/20 border border-telegram-border/30 space-y-4">
-              <h3 className="text-sm font-bold text-telegram-primary tracking-wide uppercase text-[10px]">{t('common.about')}</h3>
-              <div className="flex flex-col items-center py-3 space-y-4">
-                <img src="/logo.svg" className="w-14 h-14 drop-shadow-lg" alt="Telegram Drive Logo" />
-                <div className="text-center">
-                  <p className="text-sm font-bold text-telegram-text">Telegram Drive</p>
-                  <p className="text-[11px] text-telegram-subtext mt-0.5">v{appVersion}</p>
-                </div>
 
-                <div className="w-10 h-px bg-telegram-border" />
-
-                <div className="text-center space-y-2.5">
-                  <p className="text-xs font-semibold text-telegram-text">Cameron Amer</p>
-
-                  <button
-                    onClick={(e) => { e.preventDefault(); openUrl('https://www.cameronamer.com'); }}
-                    className="flex items-center justify-center gap-1.5 text-[11px] text-telegram-primary hover:text-telegram-primary/80 transition-colors cursor-pointer"
-                  >
-                    <Globe className="w-3 h-3" />
-                    www.cameronamer.com
-                  </button>
-
-                  <button
-                    onClick={(e) => { e.preventDefault(); openUrl('https://github.com/caamer20/telegram-drive'); }}
-                    className="flex items-center justify-center gap-1.5 text-[11px] text-telegram-primary hover:text-telegram-primary/80 transition-colors cursor-pointer"
-                  >
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    github.com/caamer20/telegram-drive
-                  </button>
-                </div>
-
-                <p className="text-[10px] text-telegram-subtext/60 leading-relaxed text-center px-2">
-                  {t('settings.tagline')}
-                </p>
-              </div>
-            </div>
 
             <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 font-semibold text-xs active:scale-98 transition-all duration-200">
               <LogOut className="w-4 h-4" />
@@ -863,7 +824,7 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
         <div className="p-4 flex items-center justify-between border-b border-telegram-border/30">
           <div className="flex items-center gap-2">
             <img src="/logo.svg" className="w-8 h-8 drop-shadow-lg" alt="Logo" />
-            <span className="font-bold text-base text-telegram-text tracking-tight">Telegram Drive</span>
+            <span className="font-bold text-base text-telegram-text tracking-tight">TeleDrive</span>
           </div>
           <button
             onClick={() => setIsSidebarOpen(false)}

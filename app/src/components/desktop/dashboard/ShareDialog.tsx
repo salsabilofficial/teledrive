@@ -44,7 +44,7 @@ export function ShareDialog({ file, onClose }: ShareDialogProps) {
 
             const res = await invoke<ShareInfo>('cmd_create_share', {
                 folderId: null, // Always file-level for now
-                messageId: file.id, // In Telegram Drive, file.id is the message id
+                messageId: file.id, // In TeleDrive, file.id is the message id
                 fileName: file.name,
                 fileSize: file.size,
                 password: pwdParam,
