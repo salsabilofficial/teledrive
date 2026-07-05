@@ -7,7 +7,8 @@
     "updater": {
       "endpoints": [
         "https://raw.githubusercontent.com/salsabilofficial/teledrive/main/latest.json"
-      ]
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUwN0I3MDBFMzQ5Nzk2M0MKUldROGxwYzBEbkI3VUwwOE13MURPOUtGWWVNTGNkaFZ3WEg0MHFoR0JMSlVjNXBwYksxWEhNMkoK"
     }
   },
   "productName": "TeleDrive",
