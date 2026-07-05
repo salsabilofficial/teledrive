@@ -7,6 +7,7 @@ import path from 'path';
 import { rateLimit } from 'express-rate-limit';
 import * as tg from './telegram.js';
 import { supabase } from './supabase.js';
+import { decrypt } from './crypto.js';
 import { getClientForUser, getStats } from './clientManager.js';
 
 const app = express();
@@ -222,6 +223,28 @@ app.get('/api/auth/status', checkAuth, async (req, res) => {
     res.json({ authenticated: isConnected });
   } catch (e) {
     res.json({ authenticated: false });
+  }
+});
+
+app.get('/api/auth/telegram-credentials', checkAuth, async (req, res) => {
+  try {
+    const { data: session, error } = await supabase
+      .from('telegram_sessions')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (error || !session) {
+      return res.status(404).json({ error: 'No Telegram session found' });
+    }
+
+    const apiHash = decrypt(session.api_hash_encrypted);
+    res.json({
+      api_id: session.api_id,
+      api_hash: apiHash
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
