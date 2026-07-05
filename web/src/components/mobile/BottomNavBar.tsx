@@ -35,9 +35,6 @@ export function BottomNavBar({ activeTab, setActiveTab, isAndroid }: BottomNavBa
             <span className="text-[10px] tracking-wide uppercase font-semibold">
               {id === 'home' ? 'Home' : id === 'files' ? 'Files' : id === 'downloads' ? 'Transfers' : 'Settings'}
             </span>
-            {isActive && (
-              <span className="absolute -bottom-1.5 w-1.5 h-1.5 bg-telegram-primary rounded-full shadow-[0_0_8px_var(--telegram-primary)]" />
-            )}
           </button>
         );
       })}
