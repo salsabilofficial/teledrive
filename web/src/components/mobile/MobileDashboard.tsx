@@ -80,12 +80,18 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   const handleCheckLatency = useCallback(async () => {
     setCheckingLatency(true);
     setLatencyMs(null);
-    setTimeout(() => {
-      toast.info('Latency check not available in web version');
-      setCheckingLatency(false);
+    const start = Date.now();
+    try {
+      await api.listFiles({ folder_id: activeFolderId });
+      const latency = Date.now() - start;
+      setLatencyMs(latency);
+    } catch (e) {
       setLatencyMs(-1);
-    }, 1000);
-  }, []);
+      toast.error('Failed to test latency');
+    } finally {
+      setCheckingLatency(false);
+    }
+  }, [activeFolderId]);
 
   const { data: allFiles = [], isLoading } = useQuery({
     queryKey: ['files', activeFolderId],
@@ -216,8 +222,27 @@ export default function MobileDashboard({ onLogout }: { onLogout?: () => void })
   }, [fileRenames]);
 
   const handleBulkShare = useCallback(async () => {
-    toast.info('Bulk share not available in web version');
-  }, []);
+    if (selectedIds.length === 0) return;
+    setBulkShareLoading(true);
+    setBulkShareLinks([]);
+    try {
+      const links: Array<{ file: TelegramFile; link: string }> = [];
+      for (const id of selectedIds) {
+        const file = allFiles.find(f => f.id === id);
+        if (file) {
+          const downloadUrl = api.getDownloadUrl(file.id, activeFolderId);
+          if (downloadUrl) {
+            links.push({ file, link: downloadUrl });
+          }
+        }
+      }
+      setBulkShareLinks(links);
+    } catch (e) {
+      toast.error('Failed to generate share links');
+    } finally {
+      setBulkShareLoading(false);
+    }
+  }, [selectedIds, allFiles, activeFolderId]);
 
   const handleCopyBulkLink = useCallback((link: string) => {
     navigator.clipboard.writeText(link);

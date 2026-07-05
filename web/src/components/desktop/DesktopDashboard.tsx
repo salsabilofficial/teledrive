@@ -115,8 +115,23 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             toast.info('No shareable files selected (folders cannot be shared)');
             return;
         }
-        toast.info('Bulk share not available in web version');
-    }, [displayedFiles, selectedIds]);
+        setBulkShareLoading(true);
+        setBulkShareLinks([]);
+        try {
+            const links: Array<{ file: TelegramFile; link: string }> = [];
+            for (const file of shareFiles) {
+                const downloadUrl = api.getDownloadUrl(file.id, activeFolderId);
+                if (downloadUrl) {
+                    links.push({ file, link: downloadUrl });
+                }
+            }
+            setBulkShareLinks(links);
+        } catch (e) {
+            toast.error('Failed to generate share links');
+        } finally {
+            setBulkShareLoading(false);
+        }
+    }, [displayedFiles, selectedIds, activeFolderId]);
 
     const handleCopyBulkLink = useCallback((link: string) => {
         navigator.clipboard.writeText(link);
