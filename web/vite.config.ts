@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["logo.svg"],
       manifest: {
-        name: "Telegram Drive",
-        short_name: "TG Drive",
+        name: "TeleDrive",
+        short_name: "TeleDrive",
         description: "Cloud storage powered by Telegram",
         theme_color: "#1a1a2e",
         background_color: "#1a1a2e",

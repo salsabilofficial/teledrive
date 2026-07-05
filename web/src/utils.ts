@@ -122,7 +122,7 @@ export async function nativeShareOrCopy(
         try {
             await navigator.share({
                 title: `Shared file: ${name}`,
-                text: `Download "${name}" (${sizeStr}) via Telegram Drive`,
+                text: `Download "${name}" (${sizeStr}) via TeleDrive`,
                 url: link,
             });
             return;

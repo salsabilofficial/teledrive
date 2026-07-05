@@ -74,7 +74,7 @@ export function PortalAuth({ onAuthenticated }: PortalAuthProps) {
               <img src="/logo.svg" className="w-12 h-12 drop-shadow-md" alt="Logo" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-telegram-text">Telegram Drive</h1>
+          <h1 className="text-2xl font-bold text-telegram-text">TeleDrive</h1>
           <p className="text-xs text-telegram-subtext mt-1.5 text-center">
             {isSignUp ? 'Create your SaaS portal account' : 'Sign in to access your cloud storage'}
           </p>

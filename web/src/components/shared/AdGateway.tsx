@@ -82,11 +82,11 @@ export function AdGateway({ onContinue }: AdGatewayProps) {
         className={`auth-glass rounded-3xl shadow-2xl w-full max-w-md text-center ${isMobile ? 'p-5' : 'p-8'}`}
       >
         <div className={`mx-auto flex items-center justify-center ${isMobile ? 'mb-4' : 'mb-6'}`}>
-          <img src="/logo.svg" className={`drop-shadow-lg ${isMobile ? 'w-16 h-16' : 'w-20 h-20'}`} alt="Telegram Drive Logo" />
+          <img src="/logo.svg" className={`drop-shadow-lg ${isMobile ? 'w-16 h-16' : 'w-20 h-20'}`} alt="TeleDrive Logo" />
         </div>
 
         <h1 className={`font-bold text-white mb-2 tracking-tight ${isMobile ? 'text-lg' : 'text-2xl'}`}>
-          Welcome to Telegram Drive
+          Welcome to TeleDrive
         </h1>
         <p className="text-sm text-white/60 font-medium mb-8">
           Tap below to continue to your files
@@ -133,7 +133,7 @@ export function AdGateway({ onContinue }: AdGatewayProps) {
         )}
 
         <p className="text-[11px] text-white/30 mt-5 leading-relaxed">
-          This helps support development and keeps Telegram Drive free.
+          This helps support development and keeps TeleDrive free.
           You'll only see this once.
         </p>
 

@@ -1,6 +1,6 @@
 {
-  "name": "Telegram Drive",
-  "short_name": "TG Drive",
+  "name": "TeleDrive",
+  "short_name": "TeleDrive",
   "description": "Cloud storage powered by Telegram",
   "start_url": "/",
   "display": "standalone",
