@@ -3,6 +3,11 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://raw.githubusercontent.com/salsabilofficial/teledrive/main/latest.json"
+      ]
     }
   },
   "productName": "TeleDrive",

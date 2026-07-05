@@ -1,0 +1,11 @@
+{
+  "version": "1.9.5",
+  "notes": "TeleDrive release version 1.9.5.",
+  "pub_date": "2026-07-05T00:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/salsabilofficial/teledrive/releases/download/v1.9.5/TeleDrive_1.9.5_x64-setup.exe"
+    }
+  }
+}
