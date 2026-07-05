@@ -301,7 +301,7 @@ export async function listFiles(client, folderId, search = '', offsetId = 0) {
   const entity = await client.getInputEntity(targetId);
 
   const params = { limit: LIMIT };
-  if (offsetId) params.offset_id = offsetId;
+  if (offsetId) params.offsetId = offsetId;
 
   const messages = await client.getMessages(entity, params);
   const files = [];
