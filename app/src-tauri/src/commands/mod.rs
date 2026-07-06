@@ -14,6 +14,7 @@ pub struct TelegramState {
     pub client: Arc<Mutex<Option<Client>>>,
     pub login_token: Arc<Mutex<Option<LoginToken>>>,
     pub password_token: Arc<Mutex<Option<PasswordToken>>>,
+    pub qr_token: Arc<Mutex<Option<Vec<u8>>>>,
     pub api_id: Arc<Mutex<Option<i32>>>,
     /// Send to this channel to request runner shutdown.
     /// Uses std::sync::Mutex (not tokio) so it can be locked from synchronous

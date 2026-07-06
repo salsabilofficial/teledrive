@@ -424,9 +424,7 @@ pub async fn cmd_auth_qr_login(
         return Err("API Hash cannot be empty.".to_string());
     }
 
-    // Store API ID
     *state.api_id.lock().await = Some(api_id);
-
     let client = ensure_client_initialized(&app_handle, &state, api_id).await?;
 
     log::info!("Requesting QR login token...");
@@ -442,10 +440,10 @@ pub async fn cmd_auth_qr_login(
             let encoded = URL_SAFE_NO_PAD.encode(&t.token);
             let url = format!("tg://login?token={}", encoded);
             log::info!("QR login URL generated, expires at {}", t.expires);
+            *state.qr_token.lock().await = Some(t.token.clone());
             Ok(url)
         }
         tl::enums::auth::LoginToken::Success(_s) => {
-            // Already authorized (e.g. from a previous session)
             log::info!("QR login: already authorized");
             Ok("__authorized__".to_string())
         }
@@ -453,6 +451,7 @@ pub async fn cmd_auth_qr_login(
             log::info!("QR login: need to migrate to DC {}", m.dc_id);
             let encoded = URL_SAFE_NO_PAD.encode(&m.token);
             let url = format!("tg://login?token={}", encoded);
+            *state.qr_token.lock().await = Some(m.token.clone());
             Ok(url)
         }
     }
@@ -481,23 +480,41 @@ pub async fn cmd_auth_qr_poll(
         return Err("API Hash cannot be empty.".to_string());
     }
 
+    let token_bytes = {
+        let guard = state.qr_token.lock().await;
+        guard.clone().unwrap_or_default()
+    };
+
     let result = client.invoke(&tl::functions::auth::ExportLoginToken {
         api_id,
         api_hash,
-        except_ids: vec![],
+        except_ids: vec![token_bytes.clone()],
     }).await;
 
     match result {
-        Ok(tl::enums::auth::LoginToken::Success(_)) => {
+        Ok(tl::enums::auth::LoginToken::Success(s)) => {
             log::info!("QR login: session authorized!");
+            
+            // If authorization has a user, we are logged in.
+            // (grammers-client will automatically handle the session save on exit)
             Ok(AuthResult {
                 success: true,
                 next_step: Some("dashboard".to_string()),
                 error: None,
             })
         }
-        Ok(tl::enums::auth::LoginToken::Token(_)) | Ok(tl::enums::auth::LoginToken::MigrateTo(_)) => {
-            // Not yet scanned or accepted, or requires migration
+        Ok(tl::enums::auth::LoginToken::Token(t)) => {
+            // Check if it's the exact same token, meaning still waiting.
+            // If it's a NEW token, we update our state so next poll checks the new token.
+            *state.qr_token.lock().await = Some(t.token);
+            Ok(AuthResult {
+                success: false,
+                next_step: Some("waiting".to_string()),
+                error: None,
+            })
+        }
+        Ok(tl::enums::auth::LoginToken::MigrateTo(m)) => {
+            *state.qr_token.lock().await = Some(m.token);
             Ok(AuthResult {
                 success: false,
                 next_step: Some("waiting".to_string()),
