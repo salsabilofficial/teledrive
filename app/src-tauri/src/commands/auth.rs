@@ -468,6 +468,8 @@ pub async fn cmd_auth_qr_login(
 /// accepts the token via auth.acceptLoginToken.
 #[tauri::command]
 pub async fn cmd_auth_qr_poll(
+    api_id: i32,
+    api_hash: String,
     state: State<'_, TelegramState>,
 ) -> Result<AuthResult, String> {
     let client = {
@@ -475,9 +477,18 @@ pub async fn cmd_auth_qr_poll(
         guard.as_ref().ok_or("Client not initialized")?.clone()
     };
 
-    // Check if the session is now authorized (user scanned QR on phone)
-    match client.is_authorized().await {
-        Ok(true) => {
+    if api_hash.trim().is_empty() {
+        return Err("API Hash cannot be empty.".to_string());
+    }
+
+    let result = client.invoke(&tl::functions::auth::ExportLoginToken {
+        api_id,
+        api_hash,
+        except_ids: vec![],
+    }).await;
+
+    match result {
+        Ok(tl::enums::auth::LoginToken::Success(_)) => {
             log::info!("QR login: session authorized!");
             Ok(AuthResult {
                 success: true,
@@ -485,8 +496,8 @@ pub async fn cmd_auth_qr_poll(
                 error: None,
             })
         }
-        Ok(false) => {
-            // Not yet scanned or accepted
+        Ok(tl::enums::auth::LoginToken::Token(_)) | Ok(tl::enums::auth::LoginToken::MigrateTo(_)) => {
+            // Not yet scanned or accepted, or requires migration
             Ok(AuthResult {
                 success: false,
                 next_step: Some("waiting".to_string()),
@@ -494,12 +505,22 @@ pub async fn cmd_auth_qr_poll(
             })
         }
         Err(e) => {
-            log::warn!("QR poll auth check failed: {}", e);
-            Ok(AuthResult {
-                success: false,
-                next_step: Some("waiting".to_string()),
-                error: None,
-            })
+            let e_str = e.to_string();
+            if e_str.contains("SESSION_PASSWORD_NEEDED") {
+                log::info!("QR login: password required!");
+                Ok(AuthResult {
+                    success: true,
+                    next_step: Some("password".to_string()),
+                    error: None,
+                })
+            } else {
+                log::warn!("QR poll check failed: {}", e_str);
+                Ok(AuthResult {
+                    success: false,
+                    next_step: Some("waiting".to_string()),
+                    error: None,
+                })
+            }
         }
     }
 }

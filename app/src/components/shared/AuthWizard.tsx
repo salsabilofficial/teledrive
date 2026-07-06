@@ -200,7 +200,13 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
 
         qrPollRef.current = setInterval(async () => {
             try {
-                const res = await invoke<{ success: boolean; next_step?: string }>("cmd_auth_qr_poll");
+                const idInt = parseInt(apiId, 10);
+                if (isNaN(idInt)) return;
+                
+                const res = await invoke<{ success: boolean; next_step?: string }>("cmd_auth_qr_poll", {
+                    apiId: idInt,
+                    apiHash: apiHash
+                });
                 if (res.success) {
                     setQrPolling(false);
                     if (res.next_step === "password") {
