@@ -49,7 +49,7 @@ export function PortalAuth({ onAuthenticated }: PortalAuthProps) {
 
         // Hit the online backend's register invite endpoint
         const form = { email, password, token: token.trim() };
-        const API_BASE = import.meta.env.VITE_API_URL || 'https://salsabilofficial-teledrive.hf.space';
+        const API_BASE = import.meta.env.VITE_API_URL || 'https://api.salsabilofficial.store';
         const res = await fetch(`${API_BASE}/api/auth/register-invite`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
