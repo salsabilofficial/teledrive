@@ -294,13 +294,13 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
     };
 
     return (
-        <div className="h-full w-full auth-gradient flex items-center justify-center p-6 pt-[calc(1.5rem+env(safe-area-inset-top,24px))] relative">
+        <div className="min-h-[100dvh] w-full auth-gradient flex flex-col items-center justify-center p-6 py-12 relative overflow-y-auto">
             <AuthThemeToggle />
 
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="auth-glass p-8 rounded-3xl shadow-2xl w-full max-w-md"
+                className="auth-glass p-8 rounded-3xl shadow-2xl w-full max-w-md my-auto"
             >
                 <div className="text-center mb-8">
                     <div className="w-20 h-20 mb-6 mx-auto flex items-center justify-center filter drop-shadow-lg">
@@ -489,9 +489,18 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                                                             fgColor="#000000"
                                                         />
                                                     </div>
-                                                    <div className="text-center space-y-1">
-                                                        <p className="text-sm text-white/80">Scan with your Telegram app</p>
-                                                        <p className="text-xs text-white/40">Settings &gt; Devices &gt; Link Desktop Device</p>
+                                                    <div className="text-center space-y-2 w-full px-2">
+                                                        <p className="text-sm text-white/80">Pindai dengan aplikasi Telegram Anda</p>
+                                                        <p className="text-xs text-white/40">Pengaturan &gt; Perangkat &gt; Hubungkan Perangkat</p>
+                                                        
+                                                        <div className="pt-3 border-t border-white/5 mt-3">
+                                                            <a
+                                                                href={qrUrl}
+                                                                className="inline-flex items-center justify-center gap-1.5 w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs font-bold py-2.5 px-4 rounded-xl border border-blue-500/20 transition-all active:scale-[0.98]"
+                                                            >
+                                                                Hubungkan Langsung via Telegram
+                                                            </a>
+                                                        </div>
                                                     </div>
                                                     {qrPolling && (
                                                         <div className="flex items-center gap-2 text-xs text-blue-300">

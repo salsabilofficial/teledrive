@@ -88,6 +88,10 @@ body,
   color: rgba(26, 26, 26, 0.7);
 }
 
+:root.light .auth-glass .text-white\/50 {
+  color: rgba(26, 26, 26, 0.5);
+}
+
 :root.light .auth-glass .text-gray-400 {
   color: #555;
 }
@@ -104,6 +108,28 @@ body,
   background: rgba(0, 0, 0, 0.05);
   border-color: rgba(0, 0, 0, 0.15);
   color: #1a1a1a;
+}
+
+/* Fix AuthWizard buttons in light mode (QR Toggle & Telegram Link) */
+:root.light .auth-glass .bg-white\/15 {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #1a1a1a !important;
+}
+
+:root.light .auth-glass .bg-blue-500\/20 {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+:root.light .auth-glass .text-blue-400 {
+  color: #2563eb !important; /* darker blue for light mode visibility */
+}
+
+:root.light .auth-glass .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+:root.light .auth-glass .hover\:bg-blue-500\/30:hover {
+  background-color: rgba(59, 130, 246, 0.25);
 }
 
 /* Auth form icons - Direct overrides for maximum visibility */

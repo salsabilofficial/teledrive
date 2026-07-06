@@ -243,13 +243,13 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
     };
 
     return (
-        <div className="h-full w-full auth-gradient flex items-center justify-center p-6 pt-[calc(1.5rem+env(safe-area-inset-top,24px))] relative">
+        <div className="min-h-[100dvh] w-full auth-gradient flex flex-col items-center justify-center p-6 py-12 relative overflow-y-auto">
             <AuthThemeToggle />
 
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="auth-glass p-8 rounded-3xl shadow-2xl w-full max-w-md"
+                className="auth-glass p-8 rounded-3xl shadow-2xl w-full max-w-md my-auto"
             >
                 <div className="text-center mb-8">
                     <div className="w-20 h-20 mb-6 mx-auto flex items-center justify-center filter drop-shadow-lg">
