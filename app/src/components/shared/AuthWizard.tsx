@@ -203,11 +203,11 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                 const idInt = parseInt(apiId, 10);
                 if (isNaN(idInt)) return;
                 
-                const res = await invoke<{ success: boolean; next_step?: string }>("cmd_auth_qr_poll", {
+                const res = await invoke<{ success: boolean; next_step?: string; qr_url?: string }>("cmd_auth_qr_poll", {
                     apiId: idInt,
                     apiHash: apiHash
                 });
-                if (res.success) {
+                if (res.qr_url) setQrUrl(res.qr_url); if (res.success) {
                     setQrPolling(false);
                     if (res.next_step === "password") {
                         setStep("password");
@@ -219,7 +219,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
             } catch {
                 // Polling error — keep trying silently
             }
-        }, 3000);
+        }, 25000);
 
         return () => {
             if (qrPollRef.current) {
@@ -266,8 +266,8 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
         setLoading(true);
         setError(null);
         try {
-            const res = await invoke<{ success: boolean; next_step?: string }>("cmd_auth_sign_in", { code });
-            if (res.success) {
+            const res = await invoke<{ success: boolean; next_step?: string; qr_url?: string }>("cmd_auth_sign_in", { code });
+            if (res.qr_url) setQrUrl(res.qr_url); if (res.success) {
                 onLogin();
             } else if (res.next_step === "password") {
                 setStep("password");
@@ -286,8 +286,8 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
         setLoading(true);
         setError(null);
         try {
-            const res = await invoke<{ success: boolean; next_step?: string }>("cmd_auth_check_password", { password });
-            if (res.success) {
+            const res = await invoke<{ success: boolean; next_step?: string; qr_url?: string }>("cmd_auth_check_password", { password });
+            if (res.qr_url) setQrUrl(res.qr_url); if (res.success) {
                 onLogin();
             } else {
                 setError("Password verification failed.");

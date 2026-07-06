@@ -366,6 +366,7 @@ pub async fn cmd_auth_sign_in(
                 success: true,
                 next_step: Some("dashboard".to_string()),
                 error: None,
+                qr_url: None,
             })
         }
         Err(SignInError::PasswordRequired(token)) => {
@@ -376,6 +377,7 @@ pub async fn cmd_auth_sign_in(
                 success: false,
                 next_step: Some("password".to_string()),
                 error: None,
+                qr_url: None,
             })
         }
         Err(e) => {
@@ -405,6 +407,7 @@ pub async fn cmd_auth_check_password(
                 success: true,
                 next_step: Some("dashboard".to_string()),
                 error: None,
+                qr_url: None,
             })
         }
         Err(e) => Err(format!("2FA Failed: {}", e))
@@ -440,7 +443,6 @@ pub async fn cmd_auth_qr_login(
             let encoded = URL_SAFE_NO_PAD.encode(&t.token);
             let url = format!("tg://login?token={}", encoded);
             log::info!("QR login URL generated, expires at {}", t.expires);
-            *state.qr_token.lock().await = Some(t.token.clone());
             Ok(url)
         }
         tl::enums::auth::LoginToken::Success(_s) => {
@@ -451,7 +453,6 @@ pub async fn cmd_auth_qr_login(
             log::info!("QR login: need to migrate to DC {}", m.dc_id);
             let encoded = URL_SAFE_NO_PAD.encode(&m.token);
             let url = format!("tg://login?token={}", encoded);
-            *state.qr_token.lock().await = Some(m.token.clone());
             Ok(url)
         }
     }
@@ -480,19 +481,14 @@ pub async fn cmd_auth_qr_poll(
         return Err("API Hash cannot be empty.".to_string());
     }
 
-    let token_bytes = {
-        let guard = state.qr_token.lock().await;
-        guard.clone().unwrap_or_default()
-    };
-
     let result = client.invoke(&tl::functions::auth::ExportLoginToken {
         api_id,
         api_hash,
-        except_ids: vec![token_bytes.clone()],
+        except_ids: vec![],
     }).await;
 
     match result {
-        Ok(tl::enums::auth::LoginToken::Success(s)) => {
+        Ok(tl::enums::auth::LoginToken::Success(_s)) => {
             log::info!("QR login: session authorized!");
             
             // If authorization has a user, we are logged in.
@@ -501,34 +497,44 @@ pub async fn cmd_auth_qr_poll(
                 success: true,
                 next_step: Some("dashboard".to_string()),
                 error: None,
+                qr_url: None,
             })
         }
         Ok(tl::enums::auth::LoginToken::Token(t)) => {
-            // Check if it's the exact same token, meaning still waiting.
-            // If it's a NEW token, we update our state so next poll checks the new token.
-            *state.qr_token.lock().await = Some(t.token);
+            let encoded = URL_SAFE_NO_PAD.encode(&t.token);
+            let url = format!("tg://login?token={}", encoded);
             Ok(AuthResult {
                 success: false,
                 next_step: Some("waiting".to_string()),
                 error: None,
+                qr_url: Some(url),
             })
         }
-        Ok(tl::enums::auth::LoginToken::MigrateTo(m)) => {
-            *state.qr_token.lock().await = Some(m.token);
+        Ok(tl::enums::auth::LoginToken::MigrateTo(_m)) => {
             Ok(AuthResult {
                 success: false,
                 next_step: Some("waiting".to_string()),
-                error: None,
+                error: Some("Akun Anda berada di Data Center berbeda. Silakan gunakan metode login dengan No. HP untuk aplikasi Desktop ini.".to_string()),
+                qr_url: None,
             })
         }
         Err(e) => {
             let e_str = e.to_string();
             if e_str.contains("SESSION_PASSWORD_NEEDED") {
                 log::info!("QR login: password required!");
+                // Attempt to fetch PasswordToken
+                let request = tl::functions::account::GetPassword {};
+                if let Ok(tl::enums::account::Password::Password(pw)) = client.invoke(&request).await {
+                    let token = grammers_client::types::PasswordToken::new(pw);
+                    let mut pw_guard = state.password_token.lock().await;
+                    *pw_guard = Some(token);
+                }
+                
                 Ok(AuthResult {
                     success: true,
                     next_step: Some("password".to_string()),
                     error: None,
+                    qr_url: None,
                 })
             } else {
                 log::warn!("QR poll check failed: {}", e_str);
@@ -536,6 +542,7 @@ pub async fn cmd_auth_qr_poll(
                     success: false,
                     next_step: Some("waiting".to_string()),
                     error: None,
+                    qr_url: None,
                 })
             }
         }

@@ -14,6 +14,8 @@ pub struct AuthResult {
     pub success: bool,
     pub next_step: Option<String>, // "code", "password", "dashboard"
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub qr_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
