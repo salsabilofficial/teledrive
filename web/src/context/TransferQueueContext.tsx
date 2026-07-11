@@ -43,6 +43,7 @@ export function TransferQueueProvider({ children }: { children: ReactNode }) {
     const cancelledUploadsRef = useRef<Set<string>>(new Set());
     const activeUploadCountRef = useRef(0);
     const uploadFilesRef = useRef<Map<string, File>>(new Map());
+    const activeUploadHandlesRef = useRef<Map<string, () => void>>(new Map());
 
     const cancelledDownloadsRef = useRef<Set<string>>(new Set());
     const activeDownloadCountRef = useRef(0);
@@ -87,11 +88,24 @@ export function TransferQueueProvider({ children }: { children: ReactNode }) {
     const processUploadItem = async (item: QueueItem) => {
         activeUploadCountRef.current++;
         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'uploading', progress: 0 } : i));
+        let uploadHandle = null;
+
         try {
             const file = uploadFilesRef.current.get(item.id);
-            if (file) {
-                await api.uploadFile(file, item.folderId);
-            }
+            if (!file) throw new Error('File not found in memory queue');
+
+            uploadHandle = api.uploadFile(
+                file,
+                item.folderId,
+                item.id,
+                (progressEvent) => {
+                    setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, progress: progressEvent.percent } : i));
+                }
+            );
+            
+            activeUploadHandlesRef.current.set(item.id, uploadHandle.abort);
+            await uploadHandle.promise;
+
             if (cancelledUploadsRef.current.has(item.id)) {
                 cancelledUploadsRef.current.delete(item.id);
             } else {
@@ -112,6 +126,7 @@ export function TransferQueueProvider({ children }: { children: ReactNode }) {
                 cancelledUploadsRef.current.delete(item.id);
             }
         } finally {
+            activeUploadHandlesRef.current.delete(item.id);
             activeUploadCountRef.current--;
         }
     };
@@ -154,6 +169,11 @@ export function TransferQueueProvider({ children }: { children: ReactNode }) {
             const activeItems = q.filter(i => i.status === 'uploading' || i.status === 'downloading');
             for (const item of activeItems) {
                 cancelledUploadsRef.current.add(item.id);
+                const abortFn = activeUploadHandlesRef.current.get(item.id);
+                if (abortFn) {
+                    try { abortFn(); } catch (_) {}
+                }
+                activeUploadHandlesRef.current.delete(item.id);
                 uploadFilesRef.current.delete(item.id);
             }
             return q
@@ -168,6 +188,11 @@ export function TransferQueueProvider({ children }: { children: ReactNode }) {
             const item = q.find(i => i.id === id);
             if (item?.status === 'uploading' || item?.status === 'downloading') {
                 cancelledUploadsRef.current.add(id);
+                const abortFn = activeUploadHandlesRef.current.get(id);
+                if (abortFn) {
+                    try { abortFn(); } catch (_) {}
+                }
+                activeUploadHandlesRef.current.delete(id);
                 uploadFilesRef.current.delete(id);
                 return q.map(i => i.id === id ? { ...i, status: 'cancelled' as const } : i);
             }

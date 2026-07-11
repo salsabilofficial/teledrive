@@ -48,8 +48,7 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
         };
     }, []);
 
-    const folderIdParam = activeFolderId !== null ? activeFolderId.toString() : 'home';
-    const streamUrl = api.getDownloadUrl(file.id, activeFolderId);
+    const streamUrl = api.getStreamUrl(file.id, activeFolderId);
 
     const isVideo = isVideoFile(file.name);
     const isAudio = isAudioFile(file.name);

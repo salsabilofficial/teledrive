@@ -86,12 +86,12 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
             setLoading(true);
             setError(null);
             try {
-                const downloadUrl = api.getDownloadUrl(file.id, activeFolderId);
+                const previewUrl = api.getPreviewUrl(file.id, activeFolderId);
                 if (requestId !== latestRequestRef.current) return;
 
-                if (downloadUrl) {
-                    setSrc(downloadUrl);
-                    rememberPreview(key, downloadUrl);
+                if (previewUrl) {
+                    setSrc(previewUrl);
+                    rememberPreview(key, previewUrl);
                 } else {
                     setError("Preview not available");
                 }
@@ -114,13 +114,13 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
             if (getCachedPreview(key) || pendingPrefetch.has(key)) return;
 
             pendingPrefetch.add(key);
-            const downloadUrl = api.getDownloadUrl(candidate.id, activeFolderId);
-            if (downloadUrl) {
+            const previewUrl = api.getPreviewUrl(candidate.id, activeFolderId);
+            if (previewUrl) {
                 // Actually prefetch the image bytes into the browser cache
                 const img = new Image();
-                img.src = downloadUrl;
-                
-                rememberPreview(key, downloadUrl);
+                img.src = previewUrl;
+
+                rememberPreview(key, previewUrl);
             }
             pendingPrefetch.delete(key);
         });

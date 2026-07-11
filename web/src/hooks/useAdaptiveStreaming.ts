@@ -61,6 +61,8 @@ const MOOV_FALLBACK_TIMEOUT_MS = 3000;
 const PROGRESSIVE_CACHE_WARM_BYTES = 3145728; // 3MB — pre-warm HTTP cache for native <video> moov discovery
 
 // ── Pre-warm browser HTTP cache for progressive MP4 moov tail ─────
+// Uses the dedicated stream endpoint so native <video> fallback still hits
+// the same playback path/range semantics as the main media player.
 // When a progressive (non-fragmented) MP4 is detected and we fall back to
 // native <video>, the native player must make a Range request to the end
 // of the file to find the moov atom. This round-trip through the backend

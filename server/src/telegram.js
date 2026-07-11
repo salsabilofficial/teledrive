@@ -3,6 +3,7 @@ import { StringSession } from 'telegram/sessions/index.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 import { pendingLogins, activeClients, removeClient } from './clientManager.js';
 import { encrypt } from './crypto.js';
+import * as cache from './mediaCache.js';
 import { supabase } from './supabase.js';
 import bigInt from 'big-integer';
 import fs from 'fs';
@@ -387,6 +388,26 @@ export async function listFiles(client, folderId, search = '', offsetId = 0) {
   return { files, nextOffsetId, hasMore: nextOffsetId !== null };
 }
 
+export async function moveFile(client, sourceFolderId, targetFolderId, messageId) {
+  const srcTarget = resolveTargetId(sourceFolderId);
+  const dstTarget = resolveTargetId(targetFolderId);
+  
+  const fromEntity = await client.getInputEntity(srcTarget);
+  const toEntity = await client.getInputEntity(dstTarget);
+  
+  const forwarded = await client.forwardMessages(toEntity, {
+    messages: [parseInt(messageId)],
+    fromPeer: fromEntity
+  });
+  
+  await client.deleteMessages(fromEntity, [parseInt(messageId)], { revoke: true });
+  
+  const newMsg = forwarded[0];
+  return {
+    id: newMsg.id
+  };
+}
+
 export async function deleteFile(client, folderId, messageId) {
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
@@ -417,7 +438,7 @@ export async function uploadFile(client, folderId, filePath, fileName) {
 /**
  * Upload a file by streaming it from a local disk path (protects RAM and allows files > 20MB).
  */
-export async function uploadFileFromPath(client, folderId, filePath, fileName, mimeType) {
+export async function uploadFileFromPath(client, folderId, filePath, fileName, mimeType, progressCallback) {
   const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
   const entity = await client.getInputEntity(targetId);
 
@@ -428,6 +449,7 @@ export async function uploadFileFromPath(client, folderId, filePath, fileName, m
     file: fileToUpload,
     forceDocument: true,
     workers: 4,
+    progressCallback: progressCallback,
     attributes: [
       new Api.DocumentAttributeFilename({
         fileName: fileName
@@ -441,78 +463,52 @@ export async function uploadFileFromPath(client, folderId, filePath, fileName, m
   };
 }
 
-export async function downloadFile(client, folderId, messageId, req, res) {
-  const targetId = (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
+function resolveTargetId(folderId) {
+  return (!folderId || folderId === 'null' || folderId === 'undefined') ? 'me' : folderId;
+}
+
+export async function resolveMessageMedia(client, folderId, messageId) {
+  const targetId = resolveTargetId(folderId);
   const entity = await client.getInputEntity(targetId);
   const messages = await client.getMessages(entity, { ids: [parseInt(messageId)] });
   const message = messages[0];
 
-  if (!message || !message.media || !(message.media instanceof Api.MessageMediaDocument)) {
-    throw new Error("File not found on Telegram");
-  }
-
-  if (req.query.thumbnail === 'true') {
-    try {
-      let thumbToDownload = 0;
-      const doc = message.media.document;
-      if (doc && doc.thumbs && doc.thumbs.length > 0) {
-        const mThumb = doc.thumbs.find(t => t.type === 'm');
-        const xThumb = doc.thumbs.find(t => t.type === 'x');
-        const iThumb = doc.thumbs.find(t => t.type === 'i');
-        
-        if (mThumb) {
-          thumbToDownload = mThumb;
-        } else if (xThumb) {
-          thumbToDownload = xThumb;
-        } else if (iThumb) {
-          thumbToDownload = iThumb;
-        } else if (doc.thumbs.length > 1) {
-          thumbToDownload = doc.thumbs[doc.thumbs.length - 1];
-        }
-      }
-
-      const thumbnailBuffer = await client.downloadMedia(message.media, {
-        thumb: thumbToDownload,
-      });
-      if (thumbnailBuffer && thumbnailBuffer.length > 0) {
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Content-Length', thumbnailBuffer.length.toString());
-        res.setHeader('Cache-Control', 'public, max-age=31536000');
-        return res.send(thumbnailBuffer);
-      }
-    } catch (err) {
-      console.error("[Telegram] Failed to download thumbnail, falling back to full media:", err);
-    }
+  if (!message || !message.media) {
+    throw new Error('File not found on Telegram');
   }
 
   let mediaToDownload = null;
   let fileName = `file_${messageId}`;
   let fileSize = 0;
   let mimeType = 'application/octet-stream';
+  let isPhoto = false;
+  let isDocument = false;
 
   if (message.media instanceof Api.MessageMediaDocument) {
     const doc = message.media.document;
     mediaToDownload = doc;
-    fileSize = Number(doc.size);
-    mimeType = doc.mimeType;
+    isDocument = true;
+    fileSize = Number(doc.size || 0);
+    mimeType = doc.mimeType || mimeType;
     const fileAttr = doc.attributes.find(attr => attr instanceof Api.DocumentAttributeFilename);
     if (fileAttr && fileAttr.fileName) {
-        fileName = fileAttr.fileName;
+      fileName = fileAttr.fileName;
     } else {
-        const mime = doc.mimeType || '';
-        if (mime.includes('video/mp4')) fileName += '.mp4';
-        else if (mime.includes('image/jpeg')) fileName += '.jpg';
-        else if (mime.includes('image/png')) fileName += '.png';
-        else if (mime.includes('image/webp')) fileName += '.webp';
-        else if (mime.includes('audio/ogg')) fileName += '.ogg';
-        else if (mime.includes('audio/mpeg') || mime.includes('audio/mp3')) fileName += '.mp3';
+      const mime = doc.mimeType || '';
+      if (mime.includes('video/mp4')) fileName += '.mp4';
+      else if (mime.includes('image/jpeg')) fileName += '.jpg';
+      else if (mime.includes('image/png')) fileName += '.png';
+      else if (mime.includes('image/webp')) fileName += '.webp';
+      else if (mime.includes('audio/ogg')) fileName += '.ogg';
+      else if (mime.includes('audio/mpeg') || mime.includes('audio/mp3')) fileName += '.mp3';
     }
   } else if (message.media instanceof Api.MessageMediaPhoto) {
     mediaToDownload = message.media.photo;
+    isPhoto = true;
     mimeType = 'image/jpeg';
     fileName = `photo_${messageId}.jpg`;
     const photo = message.media.photo;
-    if (photo.sizes && photo.sizes.length > 0) {
+    if (photo?.sizes && photo.sizes.length > 0) {
       const largest = photo.sizes[photo.sizes.length - 1];
       if (largest.size) {
         fileSize = largest.size;
@@ -523,38 +519,67 @@ export async function downloadFile(client, folderId, messageId, req, res) {
   }
 
   if (!mediaToDownload) {
-    throw new Error("Unsupported media type for download");
+    throw new Error('Unsupported media type for download');
   }
 
+  return {
+    targetId,
+    entity,
+    message,
+    mediaToDownload,
+    fileName,
+    fileSize,
+    mimeType,
+    isPhoto,
+    isDocument
+  };
+}
+
+function setCacheHeaders(res, mode) {
+  const cacheControlByMode = {
+    thumbnail: 'public, max-age=31536000',
+    preview: 'public, max-age=86400',
+    stream: 'public, max-age=86400',
+    download: 'public, max-age=86400'
+  };
+  res.setHeader('Cache-Control', cacheControlByMode[mode] || 'public, max-age=3600');
+}
+
+function setMediaHeaders(res, { mimeType, fileName, fileSize, disposition = 'inline', acceptRanges = false, mode = 'download' }) {
   res.setHeader('Content-Type', mimeType || 'application/octet-stream');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  const safeFilename = encodeURIComponent(fileName);
-  res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
-  res.setHeader('Accept-Ranges', 'bytes');
-
-  // OPTIMISASI 1: Untuk foto/gambar atau file kecil di bawah 2MB, download buffer langsung (instant load)
-  const isPhoto = message.media instanceof Api.MessageMediaPhoto;
-  if ((isPhoto || fileSize < 2 * 1024 * 1024) && !req.headers.range) {
-    try {
-      const buffer = await client.downloadMedia(message.media);
-      if (buffer) {
-        res.setHeader('Content-Length', buffer.length.toString());
-        return res.send(buffer);
-      }
-    } catch (downloadErr) {
-      console.error("Direct media download failed, falling back to stream:", downloadErr);
-    }
+  setCacheHeaders(res, mode);
+  if (fileName) {
+    const safeFilename = encodeURIComponent(fileName);
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
   }
+  if (typeof fileSize === 'number' && Number.isFinite(fileSize) && fileSize > 0) {
+    res.setHeader('Content-Length', fileSize.toString());
+  }
+  if (acceptRanges) {
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+}
 
-  const range = req.headers.range;
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
+async function sendDirectBuffer(client, message, res, overrides = {}) {
+  const buffer = await client.downloadMedia(message.media, overrides);
+  if (!buffer || buffer.length === 0) {
+    return false;
+  }
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.send(buffer);
+  return true;
+}
+
+async function streamTelegramRange(client, message, res, fileSize, rangeHeader) {
+  if (rangeHeader) {
+    const parts = rangeHeader.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
     if (start >= fileSize || end >= fileSize) {
       res.setHeader('Content-Range', `bytes */${fileSize}`);
-      return res.status(416).send('Requested range not satisfiable');
+      res.status(416).send('Requested range not satisfiable');
+      return;
     }
 
     const chunksize = (end - start) + 1;
@@ -562,61 +587,235 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
     res.setHeader('Content-Length', chunksize.toString());
 
-    try {
-      // OPTIMISASI 2: Ubah REQUEST_SIZE ke 512KB (lebih optimal untuk MTProto)
-      const REQUEST_SIZE = 512 * 1024; // 512KB chunks
-      // Align start offset to 512KB boundary for iterDownload
-      const alignedStart = Math.floor(start / REQUEST_SIZE) * REQUEST_SIZE;
-      const skipBytes = start - alignedStart;
+    const REQUEST_SIZE = 512 * 1024;
+    const alignedStart = Math.floor(start / REQUEST_SIZE) * REQUEST_SIZE;
+    const skipBytes = start - alignedStart;
 
-      const fileStream = client.iterDownload({
-        file: message.media,
-        offset: bigInt(alignedStart),
-        limit: chunksize + skipBytes,
-        requestSize: REQUEST_SIZE
-      });
+    const fileStream = client.iterDownload({
+      file: message.media,
+      offset: bigInt(alignedStart),
+      limit: chunksize + skipBytes,
+      requestSize: REQUEST_SIZE
+    });
 
-      let skipped = 0;
-      for await (const chunk of fileStream) {
-        if (skipped < skipBytes) {
-          const remaining = skipBytes - skipped;
-          if (chunk.length <= remaining) {
-            skipped += chunk.length;
-            continue;
-          }
-          res.write(chunk.slice(remaining));
-          skipped = skipBytes;
-        } else {
-          res.write(chunk);
+    let skipped = 0;
+    let written = 0;
+    for await (const chunk of fileStream) {
+      if (skipped < skipBytes) {
+        const remaining = skipBytes - skipped;
+        if (chunk.length <= remaining) {
+          skipped += chunk.length;
+          continue;
         }
+        const sliced = chunk.slice(remaining, remaining + (chunksize - written));
+        res.write(sliced);
+        written += sliced.length;
+        skipped = skipBytes;
+      } else {
+        const remaining = chunksize - written;
+        if (remaining <= 0) break;
+        const toWrite = chunk.length > remaining ? chunk.slice(0, remaining) : chunk;
+        res.write(toWrite);
+        written += toWrite.length;
       }
-      res.end();
-    } catch (streamError) {
-      console.error("Streaming range download failed:", streamError);
-      if (!res.headersSent) {
-        res.status(500).send("Stream error");
-      }
+      if (written >= chunksize) break;
     }
-  } else {
+    res.end();
+    return;
+  }
+
+  if (typeof fileSize === 'number' && fileSize > 0) {
     res.setHeader('Content-Length', fileSize.toString());
+  }
 
+  const fileStream = client.iterDownload({
+    file: message.media,
+    requestSize: 512 * 1024
+  });
+
+  for await (const chunk of fileStream) {
+    res.write(chunk);
+  }
+  res.end();
+}
+
+export async function thumbnailHandler(client, folderId, messageId, _req, res) {
+  // 1) Serve from disk cache if available
+  const cached = cache.readThumb(folderId, messageId);
+  if (cached) {
+    const tag = cache.etag(cached);
+    if (_req.headers['if-none-match'] === tag) {
+      return res.status(304).end();
+    }
+    setMediaHeaders(res, { mimeType: 'image/jpeg', mode: 'thumbnail' });
+    res.setHeader('ETag', tag);
+    res.setHeader('X-Cache', 'HIT');
+    res.setHeader('Content-Length', cached.length.toString());
+    return res.send(cached);
+  }
+
+  // 2) Fetch from Telegram and cache
+  const { message, isDocument, isPhoto } = await resolveMessageMedia(client, folderId, messageId);
+
+  if (isDocument) {
     try {
-      const fileStream = client.iterDownload({
-        file: message.media,
-        requestSize: 512 * 1024 // 512KB chunks
-      });
+      let thumbToDownload = 0;
+      const doc = message.media.document;
+      if (doc?.thumbs?.length > 0) {
+        const mThumb = doc.thumbs.find(t => t.type === 'm');
+        const xThumb = doc.thumbs.find(t => t.type === 'x');
+        const iThumb = doc.thumbs.find(t => t.type === 'i');
+        thumbToDownload = mThumb || xThumb || iThumb || doc.thumbs[doc.thumbs.length - 1] || 0;
+      }
 
-      for await (const chunk of fileStream) {
-        res.write(chunk);
+      const buffer = await client.downloadMedia(message.media, { thumb: thumbToDownload });
+      if (buffer && buffer.length > 0) {
+        cache.saveThumb(folderId, messageId, buffer);
+        const tag = cache.etag(buffer);
+        setMediaHeaders(res, { mimeType: 'image/jpeg', mode: 'thumbnail' });
+        res.setHeader('ETag', tag);
+        res.setHeader('X-Cache', 'MISS');
+        res.setHeader('Content-Length', buffer.length.toString());
+        return res.send(buffer);
       }
-      res.end();
-    } catch (streamError) {
-      console.error("Streaming full download failed:", streamError);
-      if (!res.headersSent) {
-        res.status(500).send("Stream error");
-      }
+    } catch (err) {
+      console.error('[Telegram] Failed to download thumbnail:', err);
     }
   }
+
+  if (isPhoto) {
+    try {
+      const buffer = await client.downloadMedia(message.media);
+      if (buffer && buffer.length > 0) {
+        cache.saveThumb(folderId, messageId, buffer);
+        const tag = cache.etag(buffer);
+        setMediaHeaders(res, { mimeType: 'image/jpeg', mode: 'thumbnail', disposition: 'inline' });
+        res.setHeader('ETag', tag);
+        res.setHeader('X-Cache', 'MISS');
+        res.setHeader('Content-Length', buffer.length.toString());
+        return res.send(buffer);
+      }
+    } catch (err) {
+      console.error('[Telegram] Failed to download photo thumbnail:', err);
+    }
+  }
+
+  return res.status(404).json({ error: 'Thumbnail not available' });
+}
+
+export async function previewFileHandler(client, folderId, messageId, _req, res) {
+  // 1) Serve from disk cache if available
+  const cached = cache.readPreview(folderId, messageId);
+  if (cached) {
+    const tag = cache.etag(cached.buffer);
+    if (_req.headers['if-none-match'] === tag) {
+      return res.status(304).end();
+    }
+    setMediaHeaders(res, {
+      mimeType: cached.meta.mimeType || 'image/jpeg',
+      fileName: cached.meta.fileName || '',
+      fileSize: cached.buffer.length,
+      disposition: 'inline',
+      mode: 'preview'
+    });
+    res.setHeader('ETag', tag);
+    res.setHeader('X-Cache', 'HIT');
+    res.setHeader('Content-Length', cached.buffer.length.toString());
+    return res.send(cached.buffer);
+  }
+
+  // 2) Fetch from Telegram, cache, and serve
+  const media = await resolveMessageMedia(client, folderId, messageId);
+  const isPreviewable = media.isPhoto || media.mimeType.startsWith('image/');
+
+  if (!isPreviewable) {
+    return res.status(415).json({ error: 'Preview not supported for this file type' });
+  }
+
+  try {
+    const buffer = await client.downloadMedia(media.message.media);
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Empty preview buffer');
+    }
+
+    // Save to disk cache
+    cache.savePreview(folderId, messageId, buffer, {
+      mimeType: media.mimeType,
+      fileName: media.fileName
+    });
+
+    const tag = cache.etag(buffer);
+    setMediaHeaders(res, {
+      mimeType: media.mimeType,
+      fileName: media.fileName,
+      fileSize: buffer.length,
+      disposition: 'inline',
+      mode: 'preview'
+    });
+    res.setHeader('ETag', tag);
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('Content-Length', buffer.length.toString());
+    return res.send(buffer);
+  } catch (err) {
+    console.error('[Telegram] Preview download failed:', err);
+    return res.status(500).json({ error: 'Failed to load preview' });
+  }
+}
+
+export async function streamFileHandler(client, folderId, messageId, req, res) {
+  const media = await resolveMessageMedia(client, folderId, messageId);
+  setMediaHeaders(res, {
+    mimeType: media.mimeType,
+    fileName: media.fileName,
+    fileSize: media.fileSize,
+    disposition: 'inline',
+    acceptRanges: true,
+    mode: 'stream'
+  });
+
+  try {
+    await streamTelegramRange(client, media.message, res, media.fileSize, req.headers.range);
+  } catch (streamError) {
+    console.error('[Telegram] Stream download failed:', streamError);
+    if (!res.headersSent) {
+      res.status(500).send('Stream error');
+    }
+  }
+}
+
+export async function downloadFileHandler(client, folderId, messageId, req, res) {
+  const media = await resolveMessageMedia(client, folderId, messageId);
+  setMediaHeaders(res, {
+    mimeType: media.mimeType,
+    fileName: media.fileName,
+    fileSize: media.fileSize,
+    disposition: 'attachment',
+    acceptRanges: true,
+    mode: 'download'
+  });
+
+  try {
+    const canSendDirect = (media.isPhoto || media.fileSize < 2 * 1024 * 1024) && !req.headers.range;
+    if (canSendDirect) {
+      const sent = await sendDirectBuffer(client, media.message, res);
+      if (sent) return;
+    }
+
+    await streamTelegramRange(client, media.message, res, media.fileSize, req.headers.range);
+  } catch (streamError) {
+    console.error('[Telegram] Download failed:', streamError);
+    if (!res.headersSent) {
+      res.status(500).send('Stream error');
+    }
+  }
+}
+
+export async function downloadFile(client, folderId, messageId, req, res) {
+  if (req.query.thumbnail === 'true') {
+    return thumbnailHandler(client, folderId, messageId, req, res);
+  }
+
+  return downloadFileHandler(client, folderId, messageId, req, res);
 }
 
 /**

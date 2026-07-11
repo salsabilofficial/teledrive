@@ -10,6 +10,7 @@ import { api } from '../../api/client';
 import { Sidebar } from './dashboard/Sidebar';
 import { TopBar } from './dashboard/TopBar';
 import { FileExplorer } from './dashboard/FileExplorer';
+import { FilterBar, FileFilters } from './dashboard/FilterBar';
 import { UploadQueue } from './dashboard/UploadQueue';
 import { DownloadQueue } from './dashboard/DownloadQueue';
 import { MoveToFolderModal } from './dashboard/MoveToFolderModal';
@@ -56,6 +57,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [searchResults, setSearchResults] = useState<TelegramFile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+    const [filters, setFilters] = useState<FileFilters>(() => {
+        try {
+            return JSON.parse(sessionStorage.getItem('teledrive:fileFilters') || '{}');
+        } catch {
+            return {};
+        }
+    });
     const [cardScale, setCardScale] = useState(1.0);
     const internalDragRef = useRef<number[] | null>(null);
 
@@ -84,10 +93,15 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         hasNextPage,
         isFetchingNextPage
     } = useInfiniteQuery({
-        queryKey: ['files', activeFolderId],
+        queryKey: ['files', activeFolderId, debouncedSearchTerm.length > 2 ? debouncedSearchTerm : '', filters],
         queryFn: async ({ pageParam }) => {
             const offsetId = pageParam || undefined;
-            const result = await api.listFiles({ folder_id: activeFolderId, offset_id: offsetId });
+            const result = await api.listFiles({
+                folder_id: activeFolderId,
+                offset_id: offsetId,
+                search: debouncedSearchTerm.length > 2 ? debouncedSearchTerm : undefined,
+                ...filters
+            });
             return {
                 ...result,
                 data: result.data.map((f: any) => ({
@@ -104,9 +118,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const allFiles = filesPages?.pages.flatMap(p => p.data) ?? [];
 
-    const displayedFiles = searchTerm.length > 2
-        ? searchResults
-        : allFiles.filter((f: TelegramFile) => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const displayedFiles = allFiles;
 
     const { data: bandwidth } = useQuery({
         queryKey: ['bandwidth'],
@@ -214,20 +226,16 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     }, [activeFolderId]);
 
     useEffect(() => {
-        if (searchTerm.length <= 2) {
-            setSearchResults([]);
-            return;
-        }
-
-        const timer = setTimeout(async () => {
-            setIsSearching(true);
-            const results = await handleGlobalSearch(searchTerm);
-            setSearchResults(results);
-            setIsSearching(false);
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
         }, 500);
-
         return () => clearTimeout(timer);
-    }, [searchTerm, handleGlobalSearch]);
+    }, [searchTerm]);
+
+    // Persist filters to sessionStorage on change
+    useEffect(() => {
+        sessionStorage.setItem('teledrive:fileFilters', JSON.stringify(filters));
+    }, [filters]);
 
     const lastClickedIndexRef = useRef<number>(-1);
 
@@ -269,11 +277,30 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const handleRenameSubmit = useCallback(async (newName: string) => {
         if (!renameFileTarget) return;
+        
+        // Optimistic UI Update for Rename
+        const queryKey = ['files', activeFolderId];
+        await queryClient.cancelQueries({ queryKey });
+        const previousData = queryClient.getQueryData(queryKey);
+
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return old;
+            return {
+                ...old,
+                pages: old.pages.map((page: any) => ({
+                    ...page,
+                    data: page.data.map((f: any) => f.id === renameFileTarget.id ? { ...f, name: newName } : f)
+                }))
+            };
+        });
+
         try {
             await api.renameFile(renameFileTarget.id, newName, activeFolderId);
-            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+            queryClient.invalidateQueries({ queryKey });
             toast.success(`Renamed to "${newName}"`);
         } catch (e) {
+            // Rollback on failure
+            queryClient.setQueryData(queryKey, previousData);
             toast.error(`Failed to rename: ${e}`);
             throw e;
         }
@@ -621,6 +648,11 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onSearchChange={setSearchTerm}
                     onSettingsClick={() => setShowSettings(true)}
                     onRemoteUploadClick={() => setShowRemoteUpload(true)}
+                />
+                <FilterBar
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    totalResults={displayedFiles.length}
                 />
                 {searchTerm.length > 2 && (
                     <div className="px-6 pt-4 pb-0">

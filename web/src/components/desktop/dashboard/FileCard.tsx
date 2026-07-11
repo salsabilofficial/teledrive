@@ -38,6 +38,7 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
     const [isDragOver, setIsDragOver] = useState(false);
     const [thumbnail, setThumbnail] = useState<string | null>(null);
     const [thumbnailLoading, setThumbnailLoading] = useState(false);
+    const [thumbnailFailed, setThumbnailFailed] = useState(false);
 
     const { data: videoMeta, isLoading: videoMetaLoading } = useVideoMetadata(
         file.id,
@@ -56,14 +57,16 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
         if (isFolder) return;
         if (isImageFile(file.name)) {
             setThumbnailLoading(true);
+            setThumbnailFailed(false);
             const url = api.getThumbnailUrl(file.id, file.folder_id ?? null);
             setThumbnail(url);
             setThumbnailLoading(false);
         } else {
             setThumbnail(null);
             setThumbnailLoading(false);
+            setThumbnailFailed(false);
         }
-    }, [file.id, file.name, activeFolderId, isFolder]);
+    }, [file.id, file.name, file.folder_id, activeFolderId, isFolder]);
 
     return (
         <div
@@ -114,12 +117,18 @@ export function FileCard({ file, onDelete, onDownload, onPreview, onShare, isSel
                 ${isDragOver ? 'ring-2 ring-telegram-primary bg-telegram-primary/20 scale-105' : ''}`}
                 style={height ? { height: `${height}px` } : { aspectRatio: '4/3' }}
             >
-                {thumbnail ? (
+                {thumbnail && !thumbnailFailed ? (
                     <div className="absolute inset-0">
                         <img
                             src={thumbnail}
                             alt={file.name}
+                            loading="lazy"
                             className="w-full h-full object-contain"
+                            onLoad={() => setThumbnailLoading(false)}
+                            onError={() => {
+                                setThumbnailFailed(true);
+                                setThumbnailLoading(false);
+                            }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                     </div>

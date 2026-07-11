@@ -7,6 +7,8 @@ dist/
 # Server specific
 server/uploads/
 server/data.json
+server/cache/
+tmp/
 
 # Rust
 /app/src-tauri/target/

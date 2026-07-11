@@ -23,11 +23,30 @@ export function useFileOperations(
 
     const handleDelete = useCallback(async (id: number) => {
         if (!await confirm({ title: "Delete File", message: "Are you sure you want to delete this file?", confirmText: "Delete", variant: 'danger' })) return;
+        
+        // Optimistic UI Update
+        const queryKey = ['files', activeFolderId];
+        await queryClient.cancelQueries({ queryKey });
+        const previousData = queryClient.getQueryData(queryKey);
+        
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return old;
+            return {
+                ...old,
+                pages: old.pages.map((page: any) => ({
+                    ...page,
+                    data: page.data.filter((f: any) => f.id !== id)
+                }))
+            };
+        });
+
         try {
             await api.deleteFile(id, activeFolderId);
-            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+            queryClient.invalidateQueries({ queryKey });
             toast.success("File deleted");
         } catch (e) {
+            // Rollback on error
+            queryClient.setQueryData(queryKey, previousData);
             toast.error(`Delete failed: ${e}`);
         }
     }, [activeFolderId, confirm, queryClient]);
@@ -36,6 +55,24 @@ export function useFileOperations(
         const ids = selectedIdsRef.current;
         if (ids.length === 0) return;
         if (!await confirm({ title: "Delete Files", message: `Are you sure you want to delete ${ids.length} files?`, confirmText: "Delete All", variant: 'danger' })) return;
+
+        // Optimistic UI Update
+        const queryKey = ['files', activeFolderId];
+        await queryClient.cancelQueries({ queryKey });
+        const previousData = queryClient.getQueryData(queryKey);
+        
+        queryClient.setQueryData(queryKey, (old: any) => {
+            if (!old) return old;
+            return {
+                ...old,
+                pages: old.pages.map((page: any) => ({
+                    ...page,
+                    data: page.data.filter((f: any) => !ids.includes(f.id))
+                }))
+            };
+        });
+
+        setSelectedIds([]);
 
         let success = 0;
         let fail = 0;
@@ -47,10 +84,13 @@ export function useFileOperations(
                 fail++;
             }
         }
-        setSelectedIds([]);
-        queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+        
+        queryClient.invalidateQueries({ queryKey });
         if (success > 0) toast.success(`Deleted ${success} files.`);
-        if (fail > 0) toast.error(`Failed to delete ${fail} files.`);
+        if (fail > 0) {
+            // Partial rollback if failures happen (simple full invalidation/refetch suffices)
+            toast.error(`Failed to delete ${fail} files.`);
+        }
     }, [activeFolderId, confirm, queryClient, setSelectedIds]);
 
     const handleBulkDownload = useCallback(async () => {
@@ -84,6 +124,27 @@ export function useFileOperations(
         const ids = selectedIdsRef.current;
         if (ids.length === 0) return;
         const currentFiles = displayedFilesRef.current;
+
+        // Optimistic UI Update (Remove from source folder)
+        const sourceQueryKey = ['files', activeFolderId];
+        const targetQueryKey = ['files', targetFolderId];
+        
+        await queryClient.cancelQueries({ queryKey: sourceQueryKey });
+        await queryClient.cancelQueries({ queryKey: targetQueryKey });
+        
+        const previousSourceData = queryClient.getQueryData(sourceQueryKey);
+
+        queryClient.setQueryData(sourceQueryKey, (old: any) => {
+            if (!old) return old;
+            return {
+                ...old,
+                pages: old.pages.map((page: any) => ({
+                    ...page,
+                    data: page.data.filter((f: any) => !ids.includes(f.id))
+                }))
+            };
+        });
+
         try {
             for (const id of ids) {
                 const file = currentFiles.find(f => f.id === id);
@@ -92,11 +153,13 @@ export function useFileOperations(
                 }
             }
             toast.success(`Moved ${ids.length} files.`);
-            queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
-            queryClient.invalidateQueries({ queryKey: ['files', targetFolderId] });
+            queryClient.invalidateQueries({ queryKey: sourceQueryKey });
+            queryClient.invalidateQueries({ queryKey: targetQueryKey });
             setSelectedIds([]);
             if (onSuccess) onSuccess();
         } catch {
+            // Rollback source on failure
+            queryClient.setQueryData(sourceQueryKey, previousSourceData);
             toast.error('Failed to move files');
         }
     }, [activeFolderId, queryClient, setSelectedIds]);

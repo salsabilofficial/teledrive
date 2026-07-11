@@ -38,9 +38,9 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
         setPdf(null);
         setNumPages(0);
 
-        const streamUrl = api.getDownloadUrl(file.id, activeFolderId);
+        const documentUrl = api.getDownloadUrl(file.id, activeFolderId);
 
-        const loadingTask = pdfjsLib.getDocument(streamUrl);
+        const loadingTask = pdfjsLib.getDocument(documentUrl);
 
         loadingTask.promise.then(
              (pdfDoc) => {
