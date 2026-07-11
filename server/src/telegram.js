@@ -532,6 +532,20 @@ export async function downloadFile(client, folderId, messageId, req, res) {
   res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`);
   res.setHeader('Accept-Ranges', 'bytes');
 
+  // OPTIMISASI 1: Untuk foto/gambar atau file kecil di bawah 2MB, download buffer langsung (instant load)
+  const isPhoto = message.media instanceof Api.MessageMediaPhoto;
+  if ((isPhoto || fileSize < 2 * 1024 * 1024) && !req.headers.range) {
+    try {
+      const buffer = await client.downloadMedia(message.media);
+      if (buffer) {
+        res.setHeader('Content-Length', buffer.length.toString());
+        return res.send(buffer);
+      }
+    } catch (downloadErr) {
+      console.error("Direct media download failed, falling back to stream:", downloadErr);
+    }
+  }
+
   const range = req.headers.range;
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-");
@@ -549,9 +563,9 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     res.setHeader('Content-Length', chunksize.toString());
 
     try {
-      // Telegram requires requestSize to be a multiple of 1MB (1048576)
-      const REQUEST_SIZE = 1024 * 1024; // 1MB chunks
-      // Align start offset to 1MB boundary for iterDownload
+      // OPTIMISASI 2: Ubah REQUEST_SIZE ke 512KB (lebih optimal untuk MTProto)
+      const REQUEST_SIZE = 512 * 1024; // 512KB chunks
+      // Align start offset to 512KB boundary for iterDownload
       const alignedStart = Math.floor(start / REQUEST_SIZE) * REQUEST_SIZE;
       const skipBytes = start - alignedStart;
 
@@ -589,7 +603,7 @@ export async function downloadFile(client, folderId, messageId, req, res) {
     try {
       const fileStream = client.iterDownload({
         file: message.media,
-        requestSize: 1024 * 1024 // 1MB chunks
+        requestSize: 512 * 1024 // 512KB chunks
       });
 
       for await (const chunk of fileStream) {
